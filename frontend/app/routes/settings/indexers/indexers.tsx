@@ -13,6 +13,7 @@ interface ConnectionDetails {
     ApiKey: string;
     Enabled: boolean;
     UserAgent?: string;
+    MaxRequestsPerMinute?: number;
 }
 
 interface IndexerConfig {
@@ -39,7 +40,7 @@ export function IndexersSettings({ config, setNewConfig }: IndexersSettingsProps
         update({
             Indexers: [
                 ...indexerConfig.Indexers,
-                { Name: "", Url: "", ApiKey: "", Enabled: true, UserAgent: "" }
+                { Name: "", Url: "", ApiKey: "", Enabled: true, UserAgent: "", MaxRequestsPerMinute: 0 }
             ]
         });
     }, [indexerConfig, update]);
@@ -48,7 +49,7 @@ export function IndexersSettings({ config, setNewConfig }: IndexersSettingsProps
         update({ Indexers: indexerConfig.Indexers.filter((_, i) => i !== index) });
     }, [indexerConfig, update]);
 
-    const change = useCallback((index: number, field: keyof ConnectionDetails, value: string | boolean) => {
+    const change = useCallback((index: number, field: keyof ConnectionDetails, value: string | boolean | number) => {
         update({
             Indexers: indexerConfig.Indexers.map((x, i) =>
                 i === index ? { ...x, [field]: value } : x
@@ -86,7 +87,7 @@ export function IndexersSettings({ config, setNewConfig }: IndexersSettingsProps
 interface IndexerFormProps {
     instance: ConnectionDetails;
     index: number;
-    onChange: (index: number, field: keyof ConnectionDetails, value: string | boolean) => void;
+    onChange: (index: number, field: keyof ConnectionDetails, value: string | boolean | number) => void;
     onRemove: (index: number) => void;
 }
 
@@ -163,6 +164,16 @@ function IndexerForm({ instance, index, onChange, onRemove }: IndexerFormProps) 
                         placeholder="Leave blank to use global default"
                         value={instance.UserAgent ?? ""}
                         onChange={e => onChange(index, 'UserAgent', e.target.value)} />
+                </Form.Group>
+                <Form.Group>
+                    <Form.Label>Max requests / minute <span style={{ opacity: 0.6, fontWeight: 'normal' }}>(0 = unlimited)</span></Form.Label>
+                    <Form.Control
+                        type="number"
+                        min={0}
+                        className={styles.input}
+                        placeholder="0"
+                        value={instance.MaxRequestsPerMinute ?? 0}
+                        onChange={e => onChange(index, 'MaxRequestsPerMinute', parseInt(e.target.value || "0", 10))} />
                 </Form.Group>
                 <Form.Check
                     type="switch"

@@ -2,12 +2,13 @@ using System.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using NzbWebDAV.Clients.Indexers;
 using NzbWebDAV.Config;
+using NzbWebDAV.Services;
 
 namespace NzbWebDAV.Api.Controllers.SearchIndexers;
 
 [ApiController]
 [Route("api/search-indexers")]
-public class SearchIndexersController(ConfigManager configManager) : BaseApiController
+public class SearchIndexersController(ConfigManager configManager, NewznabRateLimiter rateLimiter) : BaseApiController
 {
     protected override async Task<IActionResult> HandleRequest()
     {
@@ -21,6 +22,7 @@ public class SearchIndexersController(ConfigManager configManager) : BaseApiCont
             try
             {
                 var ua = string.IsNullOrWhiteSpace(x.UserAgent) ? configManager.GetUserAgent() : x.UserAgent;
+                await rateLimiter.WaitAsync(x.Name, x.MaxRequestsPerMinute, ct).ConfigureAwait(false);
                 var client = new NewznabClient(x.Url, x.ApiKey, ua);
                 var items = await client.SearchAsync(request.Query, request.Limit, ct).ConfigureAwait(false);
                 var mapped = items.Select(i => new SearchIndexersResponse.Result

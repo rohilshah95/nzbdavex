@@ -8,7 +8,11 @@ namespace NzbWebDAV.Api.Controllers.Profiles;
 
 [ApiController]
 [Route("p/{token}/stream/{type}/{id}.json")]
-public class ProfileStreamController(ConfigManager configManager, NzbResolutionCache cache) : ControllerBase
+public class ProfileStreamController(
+    ConfigManager configManager,
+    NzbResolutionCache cache,
+    NewznabRateLimiter rateLimiter
+) : ControllerBase
 {
     [HttpOptions]
     public IActionResult Preflight()
@@ -36,11 +40,13 @@ public class ProfileStreamController(ConfigManager configManager, NzbResolutionC
         if (queryParams is null) return new JsonResult(new { streams = Array.Empty<object>() });
 
         var ct = HttpContext.RequestAborted;
+
         var perIndexer = await Task.WhenAll(indexers.Select(async x =>
         {
             try
             {
                 var ua = string.IsNullOrWhiteSpace(x.UserAgent) ? configManager.GetUserAgent() : x.UserAgent;
+                await rateLimiter.WaitAsync(x.Name, x.MaxRequestsPerMinute, ct).ConfigureAwait(false);
                 var client = new NewznabClient(x.Url, x.ApiKey, ua);
                 var items = await client.QueryAsync(queryParams, ct).ConfigureAwait(false);
                 return items.Select(i => new { indexer = x.Name, userAgent = ua, item = i });
@@ -57,8 +63,7 @@ public class ProfileStreamController(ConfigManager configManager, NzbResolutionC
             .Where(x => !string.IsNullOrWhiteSpace(x.item.NzbUrl))
             .GroupBy(x => x.item.NzbUrl)
             .Select(g => g.First())
-            .OrderByDescending(x => x.item.Posted ?? DateTimeOffset.MinValue)
-            .Take(50)
+            .OrderByDescending(x => x.item.Size)
             .Select(x =>
             {
                 var nzbToken = cache.Add(x.indexer, x.userAgent, x.item.NzbUrl, x.item.Title);
@@ -84,7 +89,8 @@ public class ProfileStreamController(ConfigManager configManager, NzbResolutionC
             {
                 ["t"] = "movie",
                 ["imdbid"] = imdb,
-                ["limit"] = "50",
+                ["cat"] = "2000",
+                ["limit"] = "200",
             };
         }
         if (type == "series")
@@ -101,7 +107,8 @@ public class ProfileStreamController(ConfigManager configManager, NzbResolutionC
                 ["imdbid"] = imdb,
                 ["season"] = season.ToString(),
                 ["ep"] = episode.ToString(),
-                ["limit"] = "50",
+                ["cat"] = "5000",
+                ["limit"] = "200",
             };
         }
         return null;

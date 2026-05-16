@@ -92,6 +92,7 @@ class Program
             .AddSingleton<UsenetStreamingClient>()
             .AddSingleton<QueueManager>()
             .AddSingleton<NzbResolutionCache>()
+            .AddSingleton<NewznabRateLimiter>()
             .AddHostedService<HealthCheckService>()
             .AddHostedService<ArrMonitoringService>()
             .AddHostedService<BlobCleanupService>()

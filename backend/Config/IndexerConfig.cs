@@ -11,5 +11,6 @@ public class IndexerConfig
         public required string ApiKey { get; set; }
         public bool Enabled { get; set; } = true;
         public string? UserAgent { get; set; }
+        public int MaxRequestsPerMinute { get; set; } = 0;
     }
 }
