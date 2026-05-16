@@ -10,6 +10,7 @@ using NzbWebDAV.Queue;
 using NzbWebDAV.Services;
 using NzbWebDAV.Utils;
 using NzbWebDAV.Websocket;
+using Serilog;
 
 namespace NzbWebDAV.Api.Controllers.Profiles;
 
@@ -30,6 +31,20 @@ public class ProfilePlayController(
     [HttpGet]
     public async Task<IActionResult> Get(string token, string nzbToken)
     {
+        try
+        {
+            return await HandleAsync(token, nzbToken).ConfigureAwait(false);
+        }
+        catch (Exception e)
+        {
+            Log.Error(e, "Play handler crashed for token {Token} / nzbToken {NzbToken}", token, nzbToken);
+            if (HttpContext.Response.HasStarted) return new EmptyResult();
+            return StatusCode(500, $"Internal error: {e.GetType().Name}: {e.Message}");
+        }
+    }
+
+    private async Task<IActionResult> HandleAsync(string token, string nzbToken)
+    {
         var profile = configManager.GetProfileConfig().Profiles.FirstOrDefault(x => x.Token == token);
         if (profile is null) return NotFound();
 
@@ -40,30 +55,32 @@ public class ProfilePlayController(
             return BuildRedirect(entry.DavItemId.Value, entry.VideoExtension);
 
         var ct = HttpContext.RequestAborted;
-        Stream nzbStream;
+
+        var buffer = new MemoryStream();
         try
         {
             using var req = new HttpRequestMessage(HttpMethod.Get, entry.NzbUrl);
-            req.Headers.UserAgent.ParseAdd(entry.IndexerUserAgent);
-            var resp = await HttpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+            req.Headers.TryAddWithoutValidation("User-Agent", entry.IndexerUserAgent);
+            using var resp = await HttpClient.SendAsync(req, HttpCompletionOption.ResponseContentRead, ct).ConfigureAwait(false);
             if (!resp.IsSuccessStatusCode) return StatusCode(502, $"Indexer returned {(int)resp.StatusCode}.");
-            nzbStream = await resp.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+            await using var stream = await resp.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+            await stream.CopyToAsync(buffer, ct).ConfigureAwait(false);
         }
         catch (Exception e)
         {
             return StatusCode(502, $"Failed to fetch NZB: {e.Message}");
         }
+        buffer.Position = 0;
 
         Guid nzoId;
         try
         {
-            await using var stream = nzbStream;
             var safeTitle = SanitizeFileName(entry.Title);
             var addFileRequest = new AddFileRequest
             {
                 FileName = $"{safeTitle}.nzb",
                 ContentType = "application/x-nzb",
-                NzbFileStream = stream,
+                NzbFileStream = buffer,
                 Category = configManager.GetManualUploadCategory(),
                 Priority = QueueItem.PriorityOption.Force,
                 PostProcessing = QueueItem.PostProcessingOption.None,
@@ -76,7 +93,7 @@ public class ProfilePlayController(
         }
         catch (Exception e)
         {
-            return StatusCode(500, $"Queueing failed: {e.Message}");
+            return StatusCode(500, $"Queueing failed: {e.GetType().Name}: {e.Message}");
         }
 
         var deadline = DateTime.UtcNow + ProcessingTimeout;
