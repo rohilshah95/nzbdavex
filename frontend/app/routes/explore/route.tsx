@@ -96,13 +96,12 @@ function Body(props: ExplorePageData) {
                                     <div className={styles["item-name"]}>{x.name}</div>
                                 </div>
                             </Link>
-                            <button
-                                type="button"
-                                className={styles["item-menu"]}
-                                title="Delete folder"
-                                onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(x.name); }}>
-                                ✕
-                            </button>
+                            {isDeletable(parentDirectories) && (
+                                <ItemMenu
+                                    className={styles["item-menu"]}
+                                    openClassName={styles["open-item-menu"]}
+                                    onRemove={() => handleDelete(x.name)} />
+                            )}
                         </div>
                     )}
                     {items.filter(x => !x.isDirectory).map((x, index) =>
@@ -119,7 +118,7 @@ function Body(props: ExplorePageData) {
                                 openClassName={styles["open-item-menu"]}
                                 exploreFile={x as ExploreFile}
                                 previewPath={getFilePath(x as ExploreFile)}
-                                onRemove={() => handleDelete(x.name)} />
+                                onRemove={isDeletable(parentDirectories) ? () => handleDelete(x.name) : undefined} />
                         </div>
                     )}
                 </div>
@@ -161,6 +160,10 @@ function getRelativePath(path: string, filename: string) {
 
 function getParentDirectories(webdavPath: string): string[] {
     return webdavPath == "" ? [] : webdavPath.split('/');
+}
+
+function isDeletable(parentDirectories: string[]): boolean {
+    return parentDirectories.length >= 2;
 }
 
 function getClassName(item: DirectoryItem | ExploreFile) {

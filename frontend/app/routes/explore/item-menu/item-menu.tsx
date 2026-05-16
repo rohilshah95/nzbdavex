@@ -6,32 +6,37 @@ import { classNames } from "~/utils/styling"
 export type ItemMenuProps = {
     className?: string
     openClassName?: string
-    exploreFile: ExploreFile,
-    previewPath: string,
+    exploreFile?: ExploreFile,
+    previewPath?: string,
     onRemove?: () => void,
 }
 
 export function ItemMenu({ className, openClassName, exploreFile, previewPath, onRemove }: ItemMenuProps): ReactNode {
     const [isOpen, setIsOpen] = useState(false);
-    const exportNzbUrl = `/api/download-nzb?nzbBlobId=${exploreFile.nzbBlobId}`;
-    const downloadUrl = `${previewPath}&download=true`;
+    const exportNzbUrl = exploreFile ? `/api/download-nzb?nzbBlobId=${exploreFile.nzbBlobId}` : undefined;
+    const downloadUrl = previewPath ? `${previewPath}&download=true` : undefined;
 
     const onClick = useCallback((e: React.MouseEvent) => {
+        e.preventDefault();
         e.stopPropagation();
         setIsOpen(x => !x);
     }, []);
+
+    const options = [
+        previewPath ? { option: <Preview />, linkTo: previewPath } : undefined,
+        downloadUrl ? { option: <Download />, linkTo: downloadUrl } : undefined,
+        exploreFile?.nzbBlobId && exportNzbUrl ? { option: <ExportNzb />, linkTo: exportNzbUrl } : undefined,
+        onRemove ? { option: <Remove />, variant: "danger" as const, onSelect: onRemove } : undefined,
+    ].filter(Boolean);
+
+    if (options.length === 0) return null;
 
     return (
         <>
             <div className={classNames([className, isOpen && openClassName])} onClick={onClick}>
                 ⋯
             </div>
-            <DropdownOptions isOpen={isOpen} onClose={() => setIsOpen(false)} options={[
-                { option: <Preview />, linkTo: previewPath },
-                { option: <Download />, linkTo: downloadUrl },
-                !!exploreFile.nzbBlobId ? { option: <ExportNzb />, linkTo: exportNzbUrl } : undefined,
-                onRemove ? { option: <Remove />, variant: "danger" as const, onSelect: onRemove } : undefined,
-            ]} />
+            <DropdownOptions isOpen={isOpen} onClose={() => setIsOpen(false)} options={options} />
         </>
     );
 }
