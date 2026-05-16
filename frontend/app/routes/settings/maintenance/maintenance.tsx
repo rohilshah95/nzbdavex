@@ -1,4 +1,4 @@
-import { Accordion, Form, InputGroup } from "react-bootstrap";
+import { Accordion, Form } from "react-bootstrap";
 import styles from "./maintenance.module.css"
 import { RemoveUnlinkedFiles } from "./remove-unlinked-files/remove-unlinked-files";
 import { ConvertStrmToSymlinks } from "./strm-to-symlinks/strm-to-symlinks";
@@ -38,7 +38,7 @@ export function Maintenance({ savedConfig, config, setNewConfig }: MaintenancePr
                         label={'Schedule "Remove Orphaned Files" Task Daily'}
                         checked={isScheduledOrphanTaskEnabled(config)}
                         onChange={e => setNewConfig({ ...config, "maintenance.remove-orphaned-schedule-enabled": "" + e.target.checked })} />
-                    <InputGroup className={styles.input} style={{ marginTop: '15px' }}>
+                    <div className={styles.scheduleRow}>
                         <Form.Select
                             disabled={!isScheduledOrphanTaskEnabled(config)}
                             value={getScheduledTime(config).hour}
@@ -84,7 +84,7 @@ export function Maintenance({ savedConfig, config, setNewConfig }: MaintenancePr
                             <option value="am">am</option>
                             <option value="pm">pm</option>
                         </Form.Select>
-                    </InputGroup>
+                    </div>
                     <Form.Text id="remove-orphaned-schedule-help" muted>
                         When enabled, the "Remove Orphaned Files" task will run every day at the specified time.
                         You may need to set the TZ env variable to ensure the correct timezone.

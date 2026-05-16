@@ -1,33 +1,62 @@
 .tasksContainer {
-    max-width: 600px;
+    max-width: 700px;
 }
 
 .settingsContainer {
-    max-width: 400px;
+    max-width: 560px;
 }
 
 .input {
     margin-bottom: 8px;
 }
 
+.scheduleRow {
+    display: flex;
+    gap: 10px;
+    margin-top: 14px;
+    margin-bottom: 8px;
+    max-width: 320px;
+}
+
+.scheduleRow > * {
+    flex: 1;
+}
+
 .accordionItem {
-    border: 1px solid rgba(255, 255, 255, 0.01);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md) !important;
     overflow: hidden;
+    margin-bottom: 8px;
+    background-color: var(--bg-elevated) !important;
 }
 
 .accordionHeader button {
-    background-color: #02181d;
-    color: #dee2e6;
+    background-color: var(--bg-elevated) !important;
+    color: var(--text-primary) !important;
     box-shadow: none !important;
+    border-radius: var(--radius-md) !important;
+    font-weight: 500;
+    font-size: 14px;
+    padding: 14px 16px;
+}
 
-    &[aria-expanded="true"] {
-        background-color: #02181d;
-        color: #dee2e6;
-    }
+.accordionHeader button[aria-expanded="true"] {
+    background-color: var(--bg-surface) !important;
+    color: var(--text-primary) !important;
+    border-bottom: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md) var(--radius-md) 0 0 !important;
+}
+
+.accordionHeader button:hover {
+    background-color: var(--bg-surface) !important;
+}
+
+.accordionHeader button::after {
+    filter: invert(0.7);
 }
 
 .accordionBody {
-    background-color: #02181d;
-    color: #dee2e6;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    background-color: var(--bg-elevated) !important;
+    color: var(--text-secondary) !important;
+    padding: 16px;
 }

@@ -1,5 +1,5 @@
 .container {
-    max-width:400px;
+    max-width: 480px;
 }
 
 .input {
@@ -7,14 +7,14 @@
 }
 
 .input::placeholder {
-    color: rgba(255, 255, 255, 0.25);
+    color: var(--text-faint);
 }
 
 .error {
-    border: 1px solid red !important;
+    border: 1px solid rgba(239, 68, 68, 0.5) !important;
 }
 
 .subGroup {
-    margin-top: 15px;
-    margin-left: 15px;
+    margin-top: 14px;
+    margin-left: 14px;
 }

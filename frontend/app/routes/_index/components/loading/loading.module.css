@@ -8,13 +8,12 @@
 }
 
 .loader-ring {
-    width: 250px;
-    height: 250px;
+    width: 56px;
+    height: 56px;
     border-radius: 50%;
-    border: 12px solid rgba(147, 161, 161, 0.2);
-    border-top-color: #93a1a1;
-    animation: spin 1.5s linear infinite;
-    box-shadow: 0 0 20px rgba(147, 161, 161, 0.5);
+    border: 3px solid var(--border-subtle);
+    border-top-color: var(--text-primary);
+    animation: spin 0.9s linear infinite;
     position: absolute;
     top: 50%;
     left: 50%;
@@ -32,13 +31,14 @@
 }
 
 .loading-text {
-    color: #93a1a1;
-    font-size: 2em;
-    font-weight: bold;
-    text-shadow: 0 0 6px rgba(147, 161, 161, 0.5);
+    color: var(--text-muted);
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
     position: absolute;
     top: 50%;
     left: 50%;
-    transform: translate(-50%, -50%);
+    transform: translate(-50%, calc(-50% + 50px));
     z-index: 1;
 }
