@@ -9,6 +9,7 @@ using NzbWebDAV.Extensions;
 using NzbWebDAV.Queue;
 using NzbWebDAV.Services;
 using NzbWebDAV.Utils;
+using NzbWebDAV.WebDav;
 using NzbWebDAV.Websocket;
 using Serilog;
 
@@ -146,7 +147,7 @@ public class ProfilePlayController(
     private IActionResult BuildRedirect(Guid davItemId, string extension)
     {
         var baseUrl = HttpContext.GetPublicBaseUrl(configManager.GetBaseUrl());
-        var path = $".ids/{davItemId}.{extension}";
+        var path = DatabaseStoreSymlinkFile.GetTargetPath(davItemId, "", '/').TrimStart('/');
         var dlKey = GetWebdavItemRequest.GenerateDownloadKey(configManager.GetStrmKey(), path);
         return Redirect($"{baseUrl}/view/{path}?downloadKey={dlKey}&extension={extension}");
     }
