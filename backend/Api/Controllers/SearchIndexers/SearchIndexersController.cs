@@ -20,7 +20,8 @@ public class SearchIndexersController(ConfigManager configManager) : BaseApiCont
             var sw = Stopwatch.StartNew();
             try
             {
-                var client = new NewznabClient(x.Url, x.ApiKey);
+                var ua = string.IsNullOrWhiteSpace(x.UserAgent) ? configManager.GetUserAgent() : x.UserAgent;
+                var client = new NewznabClient(x.Url, x.ApiKey, ua);
                 var items = await client.SearchAsync(request.Query, request.Limit, ct).ConfigureAwait(false);
                 var mapped = items.Select(i => new SearchIndexersResponse.Result
                 {

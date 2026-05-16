@@ -6,6 +6,7 @@ public class TestIndexerConnectionRequest
 {
     public string Url { get; init; }
     public string ApiKey { get; init; }
+    public string? UserAgent { get; init; }
 
     public TestIndexerConnectionRequest(HttpContext context)
     {
@@ -14,5 +15,7 @@ public class TestIndexerConnectionRequest
 
         ApiKey = context.Request.Form["apiKey"].FirstOrDefault()
                  ?? throw new BadHttpRequestException("Indexer apiKey is required");
+
+        UserAgent = context.Request.Form["userAgent"].FirstOrDefault();
     }
 }

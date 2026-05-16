@@ -10,5 +10,6 @@ public class IndexerConfig
         public required string Url { get; set; }
         public required string ApiKey { get; set; }
         public bool Enabled { get; set; } = true;
+        public string? UserAgent { get; set; }
     }
 }

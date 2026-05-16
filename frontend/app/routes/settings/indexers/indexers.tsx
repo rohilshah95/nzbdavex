@@ -12,6 +12,7 @@ interface ConnectionDetails {
     Url: string;
     ApiKey: string;
     Enabled: boolean;
+    UserAgent?: string;
 }
 
 interface IndexerConfig {
@@ -38,7 +39,7 @@ export function IndexersSettings({ config, setNewConfig }: IndexersSettingsProps
         update({
             Indexers: [
                 ...indexerConfig.Indexers,
-                { Name: "", Url: "", ApiKey: "", Enabled: true }
+                { Name: "", Url: "", ApiKey: "", Enabled: true, UserAgent: "" }
             ]
         });
     }, [indexerConfig, update]);
@@ -101,13 +102,14 @@ function IndexerForm({ instance, index, onChange, onRemove }: IndexerFormProps) 
             const fd = new FormData();
             fd.append('url', instance.Url);
             fd.append('apiKey', instance.ApiKey);
+            if (instance.UserAgent?.trim()) fd.append('userAgent', instance.UserAgent);
             const r = await fetch('/api/test-indexer-connection', { method: 'POST', body: fd });
             const data = await r.json();
             setState(data.status && data.connected ? 'success' : 'error');
         } catch {
             setState('error');
         }
-    }, [instance.Url, instance.ApiKey]);
+    }, [instance.Url, instance.ApiKey, instance.UserAgent]);
 
     return (
         <Card className={styles.instanceCard}>
@@ -152,6 +154,15 @@ function IndexerForm({ instance, index, onChange, onRemove }: IndexerFormProps) 
                         className={styles.input}
                         value={instance.ApiKey}
                         onChange={e => onChange(index, 'ApiKey', e.target.value)} />
+                </Form.Group>
+                <Form.Group>
+                    <Form.Label>User-Agent <span style={{ opacity: 0.6, fontWeight: 'normal' }}>(optional)</span></Form.Label>
+                    <Form.Control
+                        type="text"
+                        className={styles.input}
+                        placeholder="Leave blank to use global default"
+                        value={instance.UserAgent ?? ""}
+                        onChange={e => onChange(index, 'UserAgent', e.target.value)} />
                 </Form.Group>
                 <Form.Check
                     type="switch"
