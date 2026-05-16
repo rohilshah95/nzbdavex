@@ -68,6 +68,21 @@ function Body(props: ExplorePageData) {
         return `/view/${relativePath}?downloadKey=${file.downloadKey}${extensionQueryParam}`;
     }, [location.pathname]);
 
+    const handleDelete = useCallback(async (itemName: string) => {
+        if (!confirm(`Delete "${itemName}"?\nThis cannot be undone.`)) return;
+        const pathname = getWebdavPathDecoded(location.pathname);
+        const fullPath = pathname ? `${pathname}/${itemName}` : itemName;
+        const fd = new FormData();
+        fd.append('path', fullPath);
+        const resp = await fetch('/api/delete-webdav-item', { method: 'POST', body: fd });
+        if (!resp.ok) {
+            const data = await resp.json().catch(() => ({} as any));
+            alert(`Failed to delete: ${data.error || resp.statusText}`);
+            return;
+        }
+        window.location.reload();
+    }, [location.pathname]);
+
     return (
         <div className={styles.container}>
             <Breadcrumbs parentDirectories={parentDirectories} />
@@ -81,6 +96,13 @@ function Body(props: ExplorePageData) {
                                     <div className={styles["item-name"]}>{x.name}</div>
                                 </div>
                             </Link>
+                            <button
+                                type="button"
+                                className={styles["item-menu"]}
+                                title="Delete folder"
+                                onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(x.name); }}>
+                                ✕
+                            </button>
                         </div>
                     )}
                     {items.filter(x => !x.isDirectory).map((x, index) =>
@@ -96,7 +118,8 @@ function Body(props: ExplorePageData) {
                                 className={styles["item-menu"]}
                                 openClassName={styles["open-item-menu"]}
                                 exploreFile={x as ExploreFile}
-                                previewPath={getFilePath(x as ExploreFile)} />
+                                previewPath={getFilePath(x as ExploreFile)}
+                                onRemove={() => handleDelete(x.name)} />
                         </div>
                     )}
                 </div>

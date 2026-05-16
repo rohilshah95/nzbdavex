@@ -8,9 +8,10 @@ export type ItemMenuProps = {
     openClassName?: string
     exploreFile: ExploreFile,
     previewPath: string,
+    onRemove?: () => void,
 }
 
-export function ItemMenu({ className, openClassName, exploreFile, previewPath }: ItemMenuProps): ReactNode {
+export function ItemMenu({ className, openClassName, exploreFile, previewPath, onRemove }: ItemMenuProps): ReactNode {
     const [isOpen, setIsOpen] = useState(false);
     const exportNzbUrl = `/api/download-nzb?nzbBlobId=${exploreFile.nzbBlobId}`;
     const downloadUrl = `${previewPath}&download=true`;
@@ -28,7 +29,8 @@ export function ItemMenu({ className, openClassName, exploreFile, previewPath }:
             <DropdownOptions isOpen={isOpen} onClose={() => setIsOpen(false)} options={[
                 { option: <Preview />, linkTo: previewPath },
                 { option: <Download />, linkTo: downloadUrl },
-                !!exploreFile.nzbBlobId ? { option: <ExportNzb />, linkTo: exportNzbUrl } : undefined
+                !!exploreFile.nzbBlobId ? { option: <ExportNzb />, linkTo: exportNzbUrl } : undefined,
+                onRemove ? { option: <Remove />, variant: "danger" as const, onSelect: onRemove } : undefined,
             ]} />
         </>
     );
