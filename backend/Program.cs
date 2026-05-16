@@ -91,6 +91,7 @@ class Program
             .AddSingleton(websocketManager)
             .AddSingleton<UsenetStreamingClient>()
             .AddSingleton<QueueManager>()
+            .AddSingleton<NzbResolutionCache>()
             .AddHostedService<HealthCheckService>()
             .AddHostedService<ArrMonitoringService>()
             .AddHostedService<BlobCleanupService>()

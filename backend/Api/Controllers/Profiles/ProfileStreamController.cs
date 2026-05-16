@@ -1,12 +1,13 @@
 using Microsoft.AspNetCore.Mvc;
 using NzbWebDAV.Clients.Indexers;
 using NzbWebDAV.Config;
+using NzbWebDAV.Services;
 
 namespace NzbWebDAV.Api.Controllers.Profiles;
 
 [ApiController]
 [Route("p/{token}/stream/{type}/{id}.json")]
-public class ProfileStreamController(ConfigManager configManager) : ControllerBase
+public class ProfileStreamController(ConfigManager configManager, NzbResolutionCache cache) : ControllerBase
 {
     [HttpOptions]
     public IActionResult Preflight()
@@ -41,7 +42,7 @@ public class ProfileStreamController(ConfigManager configManager) : ControllerBa
                 var ua = string.IsNullOrWhiteSpace(x.UserAgent) ? configManager.GetUserAgent() : x.UserAgent;
                 var client = new NewznabClient(x.Url, x.ApiKey, ua);
                 var items = await client.QueryAsync(queryParams, ct).ConfigureAwait(false);
-                return items.Select(i => new { indexer = x.Name, item = i });
+                return items.Select(i => new { indexer = x.Name, userAgent = ua, item = i });
             }
             catch
             {
@@ -49,6 +50,7 @@ public class ProfileStreamController(ConfigManager configManager) : ControllerBa
             }
         })).ConfigureAwait(false);
 
+        var baseUrl = configManager.GetBaseUrl().TrimEnd('/');
         var streams = perIndexer
             .SelectMany(x => x)
             .Where(x => !string.IsNullOrWhiteSpace(x.item.NzbUrl))
@@ -56,12 +58,15 @@ public class ProfileStreamController(ConfigManager configManager) : ControllerBa
             .Select(g => g.First())
             .OrderByDescending(x => x.item.Posted ?? DateTimeOffset.MinValue)
             .Take(50)
-            .Select(x => new
+            .Select(x =>
             {
-                name = x.indexer,
-                title = $"{x.item.Title}\n{FormatBytes(x.item.Size)}",
-                externalUrl = x.item.NzbUrl,
-                behaviorHints = new { notWebReady = true },
+                var nzbToken = cache.Add(x.indexer, x.userAgent, x.item.NzbUrl, x.item.Title);
+                return new
+                {
+                    name = x.indexer,
+                    title = $"{x.item.Title}\n{FormatBytes(x.item.Size)}",
+                    url = $"{baseUrl}/p/{token}/play/{nzbToken}.mkv",
+                };
             })
             .ToList();
 
