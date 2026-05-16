@@ -32,6 +32,7 @@ public class ProfilePlayController(
     [HttpGet]
     public async Task<IActionResult> Get(string token, string nzbToken)
     {
+        Response.Headers["Cache-Control"] = "no-store, no-cache, must-revalidate";
         try
         {
             return await HandleAsync(token, nzbToken).ConfigureAwait(false);

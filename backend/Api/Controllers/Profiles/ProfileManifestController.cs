@@ -40,5 +40,6 @@ public class ProfileManifestController(ConfigManager configManager) : Controller
         response.Headers["Access-Control-Allow-Origin"] = "*";
         response.Headers["Access-Control-Allow-Methods"] = "GET, OPTIONS";
         response.Headers["Access-Control-Allow-Headers"] = "*";
+        response.Headers["Cache-Control"] = "no-store, no-cache, must-revalidate";
     }
 }
