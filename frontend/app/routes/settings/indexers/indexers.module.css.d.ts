@@ -6,6 +6,7 @@ declare const styles: {
   readonly "closeButton": string;
   readonly "input": string;
   readonly "alertMessage": string;
+  readonly "urlRow": string;
   readonly "testButton": string;
   readonly "enabledRow": string;
 };

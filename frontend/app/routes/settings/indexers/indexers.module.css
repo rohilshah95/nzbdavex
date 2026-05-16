@@ -68,9 +68,23 @@
     border-radius: var(--radius-md);
 }
 
+.urlRow {
+    display: flex;
+    gap: 10px;
+    align-items: stretch;
+    margin-bottom: 8px;
+}
+
+.urlRow > :first-child {
+    flex: 1;
+    min-width: 0;
+}
+
 .testButton {
     white-space: nowrap;
     font-size: 14px;
+    min-width: 72px;
+    flex-shrink: 0;
 }
 
 .enabledRow {

@@ -51,18 +51,27 @@ export function HealthStats({ stats }: HealthStatsProps) {
                 </div>
 
                 <div className={styles.statCard}>
-                    <div className={styles.statNumber} style={{ color: '#198754' }}>{healthy}</div>
-                    <div className={styles.statLabel}>Healthy ({getPercentage(healthy)}%)</div>
+                    <div className={styles.statNumber}>{healthy}</div>
+                    <div className={styles.statLabel}>
+                        <span className={`${styles.dot} ${styles.dotHealthy}`} />
+                        Healthy ({getPercentage(healthy)}%)
+                    </div>
                 </div>
 
                 <div className={styles.statCard}>
-                    <div className={styles.statNumber} style={{ color: '#17a2b8' }}>{repaired}</div>
-                    <div className={styles.statLabel}>Repaired ({getPercentage(repaired)}%)</div>
+                    <div className={styles.statNumber}>{repaired}</div>
+                    <div className={styles.statLabel}>
+                        <span className={`${styles.dot} ${styles.dotRepaired}`} />
+                        Repaired ({getPercentage(repaired)}%)
+                    </div>
                 </div>
 
                 <div className={styles.statCard}>
-                    <div className={styles.statNumber} style={{ color: '#dc3545' }}>{deleted}</div>
-                    <div className={styles.statLabel}>Deleted ({getPercentage(deleted)}%)</div>
+                    <div className={styles.statNumber}>{deleted}</div>
+                    <div className={styles.statLabel}>
+                        <span className={`${styles.dot} ${styles.dotDeleted}`} />
+                        Deleted ({getPercentage(deleted)}%)
+                    </div>
                 </div>
             </div>
         </div>

@@ -20,6 +20,7 @@
     gap: 11px;
     border-radius: 8px;
     padding: 8px 10px;
+    margin-bottom: 3px;
     text-decoration: unset;
     color: var(--text-secondary);
     transition: background-color 120ms ease, color 120ms ease;

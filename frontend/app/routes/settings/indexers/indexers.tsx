@@ -1,4 +1,4 @@
-import { Button, Form, Card, InputGroup, Spinner } from "react-bootstrap";
+import { Button, Form, Card, Spinner } from "react-bootstrap";
 import styles from "./indexers.module.css";
 import { type Dispatch, type SetStateAction, useState, useCallback, useEffect } from "react";
 
@@ -127,7 +127,7 @@ function IndexerForm({ instance, index, onChange, onRemove }: IndexerFormProps) 
                 </Form.Group>
                 <Form.Group>
                     <Form.Label>URL</Form.Label>
-                    <InputGroup className={styles.input}>
+                    <div className={styles.urlRow}>
                         <Form.Control
                             type="text"
                             placeholder="https://api.nzbgeek.info"
@@ -146,7 +146,7 @@ function IndexerForm({ instance, index, onChange, onRemove }: IndexerFormProps) 
                                     : 'Test'}
                             </Button>
                         )}
-                    </InputGroup>
+                    </div>
                 </Form.Group>
                 <Form.Group>
                     <Form.Label>API Key</Form.Label>
