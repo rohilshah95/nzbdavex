@@ -182,13 +182,35 @@ public class ProfilePlayController(
         }
 
         if (!sawAnyBatch)
-            return await ResolveExistingOrErrorAsync(entry, 503,
-                "All ranked candidates recently failed; try again shortly.", 5,
+        {
+            var msg = excludedCount > 0
+                ? "All candidates excluded by your filters. Adjust patterns in Settings → Watchdog."
+                : "All ranked candidates recently failed; try again shortly.";
+            return await ResolveExistingOrErrorAsync(entry, 503, msg, 5,
                 HttpContext.RequestAborted).ConfigureAwait(false);
+        }
 
         return await ResolveExistingOrErrorAsync(entry, 503,
             "All tried candidates failed. Retry in a few seconds.", 5,
             HttpContext.RequestAborted).ConfigureAwait(false);
+    }
+
+    private static string? MatchExcludePattern(string title, IReadOnlyList<Regex> patterns)
+    {
+        if (patterns.Count == 0 || string.IsNullOrEmpty(title)) return null;
+        foreach (var p in patterns)
+        {
+            try
+            {
+                if (p.IsMatch(title)) return p.ToString();
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                // Pathological input; skip this pattern but don't block playback.
+                Log.Warning("Exclude pattern {Pattern} timed out matching title {Title}", p, title);
+            }
+        }
+        return null;
     }
 
     private enum BatchOutcome { Winner, AllFailed, Cancelled, BudgetTimeout }

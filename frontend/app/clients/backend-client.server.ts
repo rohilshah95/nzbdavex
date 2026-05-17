@@ -335,7 +335,8 @@ export type PlaybackAttemptOutcome =
     | "EnqueueFailed"
     | "QueueFailed"
     | "QueueCompleted"
-    | "BudgetTimeout";
+    | "BudgetTimeout"
+    | "ExcludedByPattern";
 
 export type PlaybackAttempt = {
     clickId: string,

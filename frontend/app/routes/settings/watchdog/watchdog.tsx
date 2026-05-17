@@ -1,6 +1,6 @@
 import { Form } from "react-bootstrap";
 import { Link } from "react-router";
-import { type Dispatch, type SetStateAction } from "react";
+import { type Dispatch, type SetStateAction, useMemo } from "react";
 import styles from "./watchdog.module.css";
 
 type WatchdogSettingsProps = {
@@ -8,10 +8,29 @@ type WatchdogSettingsProps = {
     setNewConfig: Dispatch<SetStateAction<Record<string, string>>>
 };
 
+type PatternIssue = { line: number, pattern: string, error: string };
+
+function validateExcludePatterns(raw: string): PatternIssue[] {
+    const issues: PatternIssue[] = [];
+    const lines = raw.split("\n");
+    for (let i = 0; i < lines.length; i++) {
+        const trimmed = lines[i].trim();
+        if (trimmed.length === 0 || trimmed.startsWith("#")) continue;
+        try {
+            new RegExp(trimmed, "i");
+        } catch (e: any) {
+            issues.push({ line: i + 1, pattern: trimmed, error: e?.message ?? "invalid regex" });
+        }
+    }
+    return issues;
+}
+
 export function WatchdogSettings({ config, setNewConfig }: WatchdogSettingsProps) {
     const set = (key: string, value: string) => setNewConfig({ ...config, [key]: value });
     const verifyMode = config["play.verify-mode"] ?? "none";
     const enabled = (config["play.watchdog-enabled"] ?? "true") === "true";
+    const excludePatterns = config["play.exclude-patterns"] ?? "";
+    const patternIssues = useMemo(() => validateExcludePatterns(excludePatterns), [excludePatterns]);
 
     return (
         <div className={styles.container}>
@@ -132,6 +151,36 @@ export function WatchdogSettings({ config, setNewConfig }: WatchdogSettingsProps
                     the same dead release. Default 5.
                 </p>
             </Form.Group>
+
+            <Form.Group className={styles.section}>
+                <Form.Label>Exclude result patterns</Form.Label>
+                <Form.Control
+                    as="textarea"
+                    rows={6}
+                    spellCheck={false}
+                    className={`${styles.input} ${styles.patternInput} ${patternIssues.length > 0 ? styles.patternInputInvalid : ""}`}
+                    placeholder={"truehd\ndts-?hd\n^.*\\.SAMPLE\\..*$\n# lines starting with # are comments"}
+                    value={excludePatterns}
+                    onChange={e => set("play.exclude-patterns", e.target.value)} />
+                {patternIssues.length > 0 && (
+                    <div className={styles.patternErrors}>
+                        {patternIssues.map((iss, i) => (
+                            <div key={i} className={styles.patternError}>
+                                <span className={styles.patternErrorLine}>Line {iss.line}</span>
+                                <code className={styles.patternErrorPattern}>{iss.pattern}</code>
+                                <span className={styles.patternErrorMessage}>— {iss.error}</span>
+                            </div>
+                        ))}
+                    </div>
+                )}
+                <p className={styles.hint}>
+                    One JavaScript-style regex per line. Candidates whose title matches any pattern are
+                    skipped before NZB fetch and appear in the <Link to="/watchdog">Watchdog</Link> log as
+                    "excluded". Case-insensitive by default — use <code>(?-i:Foo)</code> for case-sensitive.
+                    Lines starting with <code>#</code> are comments. Useful when your player can't handle
+                    certain audio/video flavors (e.g. <code>truehd</code>, <code>dts-?hd</code>).
+                </p>
+            </Form.Group>
         </div>
     );
 }
@@ -141,6 +190,12 @@ export function isWatchdogSettingsUpdated(config: Record<string, string>, newCon
         || config["play.total-budget-seconds"] !== newConfig["play.total-budget-seconds"]
         || config["play.hedge-delay-seconds"] !== newConfig["play.hedge-delay-seconds"]
         || config["play.max-candidates"] !== newConfig["play.max-candidates"]
+        || config["play.max-attempts"] !== newConfig["play.max-attempts"]
         || config["play.verify-mode"] !== newConfig["play.verify-mode"]
-        || config["play.candidate-negative-cache-minutes"] !== newConfig["play.candidate-negative-cache-minutes"];
+        || config["play.candidate-negative-cache-minutes"] !== newConfig["play.candidate-negative-cache-minutes"]
+        || (config["play.exclude-patterns"] ?? "") !== (newConfig["play.exclude-patterns"] ?? "");
+}
+
+export function isWatchdogSettingsValid(config: Record<string, string>) {
+    return validateExcludePatterns(config["play.exclude-patterns"] ?? "").length === 0;
 }

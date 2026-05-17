@@ -40,6 +40,7 @@ declare const styles: {
   readonly "colRank": string;
   readonly "colCandidate": string;
   readonly "colIndexer": string;
+  readonly "colProvider": string;
   readonly "colSize": string;
   readonly "colOutcome": string;
   readonly "colReason": string;

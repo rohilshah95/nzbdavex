@@ -10,7 +10,7 @@ import { isIndexersSettingsUpdated, isIndexersSettingsValid, IndexersSettings } 
 import { isProfilesSettingsUpdated, isProfilesSettingsValid, ProfilesSettings } from "./profiles/profiles";
 import { isMaintenanceSettingsUpdated, Maintenance } from "./maintenance/maintenance";
 import { isRepairsSettingsUpdated, RepairsSettings } from "./repairs/repairs";
-import { isWatchdogSettingsUpdated, WatchdogSettings } from "./watchdog/watchdog";
+import { isWatchdogSettingsUpdated, isWatchdogSettingsValid, WatchdogSettings } from "./watchdog/watchdog";
 import { isRcloneSettingsUpdated, RcloneSettings } from "./rclone/rclone";
 import { useCallback, useState } from "react";
 import { useBlocker } from "react-router";
@@ -129,6 +129,7 @@ function Body(props: BodyProps) {
         : isArrsUpdated && !isArrsSettingsValid(newConfig) ? "Invalid Arrs settings"
         : isIndexersUpdated && !isIndexersSettingsValid(newConfig) ? "Invalid Indexers settings"
         : isProfilesUpdated && !isProfilesSettingsValid(newConfig) ? "Invalid Profiles settings"
+        : isWatchdogUpdated && !isWatchdogSettingsValid(newConfig) ? "Invalid Watchdog regex"
         : "Save";
     const saveButtonVariant = saveButtonLabel === "Save" ? "primary"
         : saveButtonLabel === "Saved ✅" ? "success"

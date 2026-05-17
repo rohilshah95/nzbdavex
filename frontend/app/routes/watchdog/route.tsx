@@ -20,7 +20,7 @@ export async function loader() {
     return { attempts };
 }
 
-type FilterKey = "all" | "live" | "resolved" | "failed";
+type FilterKey = "all" | "live" | "resolved" | "failed" | "excluded";
 
 export default function Watchdog({ loaderData }: Route.ComponentProps) {
     const [attempts, setAttempts] = useState<PlaybackAttempt[]>(loaderData.attempts);
@@ -109,6 +109,7 @@ export default function Watchdog({ loaderData }: Route.ComponentProps) {
                     <FilterChip active={filter === "live"} onClick={() => setFilter("live")} count={stats.inFlight}>Live</FilterChip>
                     <FilterChip active={filter === "resolved"} onClick={() => setFilter("resolved")} count={stats.resolved}>Resolved</FilterChip>
                     <FilterChip active={filter === "failed"} onClick={() => setFilter("failed")} count={stats.failed}>Failed</FilterChip>
+                    <FilterChip active={filter === "excluded"} onClick={() => setFilter("excluded")} count={stats.excluded}>Excluded</FilterChip>
                 </div>
 
                 {error && <div className={styles.errorBox}>Could not load: {error}</div>}
@@ -268,6 +269,7 @@ function outcomeToTone(o: PlaybackAttemptOutcome): "ok" | "warn" | "bad" {
             return "ok";
         case "BudgetTimeout":
         case "Cancelled":
+        case "ExcludedByPattern":
             return "warn";
         default:
             return "bad";
@@ -284,6 +286,7 @@ function shortOutcome(o: PlaybackAttemptOutcome): string {
         case "PreVerifyAvailable": return "verify: ok";
         case "BudgetTimeout": return "budget timeout";
         case "Cancelled": return "cancelled";
+        case "ExcludedByPattern": return "excluded";
         default: return o;
     }
 }
@@ -337,6 +340,7 @@ function isTerminal(a: PlaybackAttempt): boolean {
         case "PreVerifyTimeout":
         case "Cancelled":
         case "BudgetTimeout":
+        case "ExcludedByPattern":
             return true;
         case "PreVerifyAvailable":
             return false;
@@ -345,23 +349,29 @@ function isTerminal(a: PlaybackAttempt): boolean {
     }
 }
 
+function hasExclusion(g: ClickGroup): boolean {
+    return g.attempts.some(a => a.outcome === "ExcludedByPattern");
+}
+
 function matchesFilter(g: ClickGroup, f: FilterKey): boolean {
     switch (f) {
         case "all": return true;
         case "live": return !g.hasWinner && !g.allResolved;
         case "resolved": return g.hasWinner;
         case "failed": return !g.hasWinner && g.allResolved;
+        case "excluded": return hasExclusion(g);
     }
 }
 
 function computeStats(groups: ClickGroup[]) {
-    let resolved = 0, failed = 0, inFlight = 0;
+    let resolved = 0, failed = 0, inFlight = 0, excluded = 0;
     for (const g of groups) {
         if (g.hasWinner) resolved++;
         else if (g.allResolved) failed++;
         else inFlight++;
+        if (hasExclusion(g)) excluded++;
     }
-    return { total: groups.length, resolved, failed, inFlight };
+    return { total: groups.length, resolved, failed, inFlight, excluded };
 }
 
 function formatProviderShort(raw: string | null | undefined): string {
