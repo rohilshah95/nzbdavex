@@ -159,7 +159,7 @@ export function WatchdogSettings({ config, setNewConfig }: WatchdogSettingsProps
                     rows={6}
                     spellCheck={false}
                     className={`${styles.input} ${styles.patternInput} ${patternIssues.length > 0 ? styles.patternInputInvalid : ""}`}
-                    placeholder={"truehd\ndts-?hd\n^.*\\.SAMPLE\\..*$\n# lines starting with # are comments"}
+                    placeholder={"# one regex per line\n# lines starting with # are comments"}
                     value={excludePatterns}
                     onChange={e => set("play.exclude-patterns", e.target.value)} />
                 {patternIssues.length > 0 && (
@@ -177,8 +177,8 @@ export function WatchdogSettings({ config, setNewConfig }: WatchdogSettingsProps
                     One JavaScript-style regex per line. Candidates whose title matches any pattern are
                     skipped before NZB fetch and appear in the <Link to="/watchdog">Watchdog</Link> log as
                     "excluded". Case-insensitive by default — use <code>(?-i:Foo)</code> for case-sensitive.
-                    Lines starting with <code>#</code> are comments. Useful when your player can't handle
-                    certain audio/video flavors (e.g. <code>truehd</code>, <code>dts-?hd</code>).
+                    Lines starting with <code>#</code> are comments. Use this to skip releases your setup
+                    can't handle, whatever the reason.
                 </p>
             </Form.Group>
         </div>
