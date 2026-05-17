@@ -25,6 +25,7 @@ type ConnectionDetails = {
     User: string;
     Pass: string;
     MaxConnections: number;
+    PreviousType?: ProviderType;
 };
 
 type ConnectionCounts = {
@@ -80,6 +81,18 @@ export function UsenetSettings({ config, setNewConfig }: UsenetSettingsProps) {
     const handleDeleteProvider = useCallback((index: number) => {
         const newProviderConfig = { ...providerConfig };
         newProviderConfig.Providers = providerConfig.Providers.filter((_, i) => i !== index);
+        setNewConfig({ ...config, "usenet.providers": serializeProviderConfig(newProviderConfig) });
+    }, [config, providerConfig, setNewConfig]);
+
+    const handleToggleProvider = useCallback((index: number) => {
+        const current = providerConfig.Providers[index];
+        if (!current) return;
+        const isDisabled = current.Type === ProviderType.Disabled;
+        const updated: ConnectionDetails = isDisabled
+            ? { ...current, Type: current.PreviousType ?? ProviderType.Pooled, PreviousType: undefined }
+            : { ...current, Type: ProviderType.Disabled, PreviousType: current.Type };
+        const newProviderConfig = { ...providerConfig };
+        newProviderConfig.Providers = providerConfig.Providers.map((p, i) => i === index ? updated : p);
         setNewConfig({ ...config, "usenet.providers": serializeProviderConfig(newProviderConfig) });
     }, [config, providerConfig, setNewConfig]);
 
@@ -147,19 +160,33 @@ export function UsenetSettings({ config, setNewConfig }: UsenetSettingsProps) {
                     </p>
                 ) : (
                     <div className={styles["providers-grid"]}>
-                        {providerConfig.Providers.map((provider, index) => (
-                            <div key={index} className={styles["provider-card"]}>
+                        {providerConfig.Providers.map((provider, index) => {
+                            const isDisabled = provider.Type === ProviderType.Disabled;
+                            return (
+                            <div key={index} className={`${styles["provider-card"]} ${isDisabled ? styles["provider-card-disabled"] : ""}`}>
                                 <div className={styles["provider-card-inner"]}>
                                     <div className={styles["provider-header"]}>
                                         <div className={styles["provider-header-content"]}>
                                             <div className={styles["provider-host"]}>
                                                 {provider.Host}
+                                                {isDisabled && <span className={styles["provider-disabled-badge"]}>Disabled</span>}
                                             </div>
                                             <div className={styles["provider-port"]}>
                                                 Port {provider.Port}
                                             </div>
                                         </div>
                                         <div className={styles["provider-header-actions"]}>
+                                            <button
+                                                className={`${styles["header-action-button"]} ${styles["toggle"]} ${isDisabled ? styles["toggle-off"] : styles["toggle-on"]}`}
+                                                onClick={() => handleToggleProvider(index)}
+                                                title={isDisabled ? "Enable Provider" : "Disable Provider"}
+                                                aria-pressed={!isDisabled}
+                                            >
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                    <path d="M18.36 6.64a9 9 0 1 1-12.73 0" />
+                                                    <line x1="12" y1="2" x2="12" y2="12" />
+                                                </svg>
+                                            </button>
                                             <button
                                                 className={styles["header-action-button"]}
                                                 onClick={() => handleEditProvider(index)}
@@ -259,7 +286,8 @@ export function UsenetSettings({ config, setNewConfig }: UsenetSettingsProps) {
                                     </div>
                                 </div>
                             </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 )}
             </div>
@@ -366,8 +394,9 @@ function ProviderModal({ show, provider, onClose, onSave }: ProviderModalProps) 
             User: user,
             Pass: pass,
             MaxConnections: parseInt(maxConnections, 10),
+            PreviousType: type === ProviderType.Disabled ? provider?.PreviousType : undefined,
         });
-    }, [type, host, port, useSsl, user, pass, maxConnections, onSave]);
+    }, [type, host, port, useSsl, user, pass, maxConnections, provider, onSave]);
 
     const handleOverlayClick = useCallback((e: React.MouseEvent) => {
         if (e.target === e.currentTarget) {
