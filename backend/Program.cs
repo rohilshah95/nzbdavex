@@ -94,6 +94,7 @@ class Program
             .AddSingleton<NzbResolutionCache>()
             .AddSingleton<CandidateNegativeCache>()
             .AddSingleton<PlaybackFastVerifier>()
+            .AddSingleton<PlaybackAttemptLog>()
             .AddSingleton<NewznabRateLimiter>()
             .AddSingleton<TvdbIdResolver>()
             .AddHostedService<HealthCheckService>()

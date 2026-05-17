@@ -22,6 +22,7 @@ public class ProfilePlayController(
     NzbResolutionCache cache,
     CandidateNegativeCache negativeCache,
     PlaybackFastVerifier fastVerifier,
+    PlaybackAttemptLog attemptLog,
     DavDatabaseClient dbClient,
     QueueManager queueManager,
     WebsocketManager websocketManager
@@ -72,13 +73,26 @@ public class ProfilePlayController(
         totalCts.CancelAfter(totalBudget);
         var deadline = DateTimeOffset.UtcNow + totalBudget;
 
+        var clickId = Guid.NewGuid();
+        var requestedTitle = entry.Primary.Title;
+        var contentType = entry.Type;
+        var startsAt = new Dictionary<string, DateTimeOffset>();
+
         // Watchdog OFF → simple single-candidate flow (no auto-fallback, no pre-verify, no negative cache).
         if (!watchdogEnabled)
         {
+            startsAt[entry.Primary.NzbUrl] = DateTimeOffset.UtcNow;
             var nzbBytes = await FetchNzbBytesAsync(entry.Primary, totalCts.Token).ConfigureAwait(false);
-            if (nzbBytes is null) return StatusCode(502, "Failed to fetch NZB from indexer.");
+            if (nzbBytes is null)
+            {
+                RecordAttempt(clickId, entry.Primary, contentType, requestedTitle, 0,
+                    PlaybackAttemptLog.Outcome.EnqueueFailed, "Indexer NZB fetch failed", startsAt, isWinner: false);
+                return StatusCode(502, "Failed to fetch NZB from indexer.");
+            }
             var single = new PreVerifyResult(entry.Primary, nzbBytes, PlaybackFastVerifier.Verdict.Available);
-            var (result, _) = await CommitAsync(nzbToken, single, deadline, totalCts.Token).ConfigureAwait(false);
+            var (result, reason) = await CommitAsync(nzbToken, single, deadline, totalCts.Token).ConfigureAwait(false);
+            RecordAttempt(clickId, entry.Primary, contentType, requestedTitle, 0,
+                MapCommitReason(reason), CommitReasonToMessage(reason), startsAt, isWinner: reason == CommitReason.Completed);
             return result ?? StatusCode(504, "Still processing. Retry the link in a few seconds.");
         }
 
@@ -89,6 +103,8 @@ public class ProfilePlayController(
             .ToList();
         if (pool.Count == 0)
             return StatusCode(503, "All ranked candidates recently failed; try again shortly.");
+
+        foreach (var c in pool) startsAt[c.NzbUrl] = DateTimeOffset.UtcNow;
 
         // Phase 1 — pre-verify (parallel, hedged): fetch NZB + verify first segment exists.
         var preVerifies = new List<Task<PreVerifyResult>>();
@@ -106,7 +122,10 @@ public class ProfilePlayController(
             if (!primaryReady)
             {
                 for (var i = 1; i < pool.Count; i++)
+                {
+                    startsAt[pool[i].NzbUrl] = DateTimeOffset.UtcNow;
                     preVerifies.Add(PreVerifyAsync(pool[i], verifyMode, totalCts.Token));
+                }
             }
         }
 
@@ -134,6 +153,10 @@ public class ProfilePlayController(
                         break;
                     case PlaybackFastVerifier.Verdict.Dead:
                         negativeCache.MarkFailed(r.Candidate.NzbUrl);
+                        RecordAttempt(clickId, r.Candidate, contentType, requestedTitle,
+                            rankIndex[r.Candidate.NzbUrl],
+                            PlaybackAttemptLog.Outcome.PreVerifyDead,
+                            "STAT/HEAD reported article missing on every provider", startsAt, isWinner: false);
                         break;
                     case PlaybackFastVerifier.Verdict.Timeout:
                         // Don't poison on timeout — provider was just slow.
@@ -148,6 +171,10 @@ public class ProfilePlayController(
                 var best = ready.Values[0];
                 ready.RemoveAt(0);
                 var (action, reason) = await CommitAsync(nzbToken, best, deadline, totalCts.Token).ConfigureAwait(false);
+                RecordAttempt(clickId, best.Candidate, contentType, requestedTitle,
+                    rankIndex[best.Candidate.NzbUrl],
+                    MapCommitReason(reason), CommitReasonToMessage(reason), startsAt,
+                    isWinner: reason == CommitReason.Completed);
                 if (action is not null) return action;
                 if (reason == CommitReason.QueueFailed || reason == CommitReason.EnqueueFailed)
                     negativeCache.MarkFailed(best.Candidate.NzbUrl);
@@ -164,6 +191,55 @@ public class ProfilePlayController(
         // A retry from the player will pick it up via TryResolveExistingAsync.
         return StatusCode(504, "Still processing. Retry the link in a few seconds.");
     }
+
+    private void RecordAttempt(
+        Guid clickId,
+        NzbResolutionCache.Candidate c,
+        string contentType,
+        string requestedTitle,
+        int rankIndex,
+        PlaybackAttemptLog.Outcome outcome,
+        string? failReason,
+        Dictionary<string, DateTimeOffset> startsAt,
+        bool isWinner)
+    {
+        var attemptedAt = startsAt.GetValueOrDefault(c.NzbUrl, DateTimeOffset.UtcNow);
+        attemptLog.Record(new PlaybackAttemptLog.Attempt
+        {
+            ClickId = clickId,
+            AttemptedAt = attemptedAt,
+            ContentType = contentType,
+            RequestedTitle = requestedTitle,
+            CandidateTitle = c.Title,
+            IndexerName = c.IndexerName,
+            Size = c.Size,
+            RankIndex = rankIndex,
+            Result = outcome,
+            FailReason = failReason,
+            DurationMs = (int)Math.Max(0, (DateTimeOffset.UtcNow - attemptedAt).TotalMilliseconds),
+            IsWinner = isWinner,
+        });
+    }
+
+    private static PlaybackAttemptLog.Outcome MapCommitReason(CommitReason r) => r switch
+    {
+        CommitReason.Completed => PlaybackAttemptLog.Outcome.QueueCompleted,
+        CommitReason.QueueFailed => PlaybackAttemptLog.Outcome.QueueFailed,
+        CommitReason.EnqueueFailed => PlaybackAttemptLog.Outcome.EnqueueFailed,
+        CommitReason.BudgetTimeout => PlaybackAttemptLog.Outcome.BudgetTimeout,
+        CommitReason.Cancelled => PlaybackAttemptLog.Outcome.Cancelled,
+        _ => PlaybackAttemptLog.Outcome.QueueFailed,
+    };
+
+    private static string? CommitReasonToMessage(CommitReason r) => r switch
+    {
+        CommitReason.Completed => null,
+        CommitReason.QueueFailed => "Queue processing marked the item as Failed",
+        CommitReason.EnqueueFailed => "Could not enqueue the NZB (DB or fetch error)",
+        CommitReason.BudgetTimeout => "Queue still processing when total budget elapsed",
+        CommitReason.Cancelled => "Client disconnected or request cancelled",
+        _ => null,
+    };
 
     private enum CommitReason
     {

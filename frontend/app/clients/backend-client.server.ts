@@ -249,6 +249,17 @@ class BackendClient {
         return data;
     }
 
+    public async getPlaybackAttempts(limit: number = 200): Promise<PlaybackAttempt[]> {
+        const url = process.env.BACKEND_URL + `/api/get-playback-attempts?limit=${limit}`;
+        const apiKey = process.env.FRONTEND_BACKEND_API_KEY || "";
+        const response = await fetch(url, { method: "GET", headers: { "x-api-key": apiKey } });
+        if (!response.ok) {
+            throw new Error(`Failed to get playback attempts: ${(await response.json()).error}`);
+        }
+        const data = await response.json();
+        return data.attempts ?? [];
+    }
+
     public async getHealthCheckHistory(pageSize?: number): Promise<HealthCheckHistoryResponse> {
         let url = process.env.BACKEND_URL + "/api/get-health-check-history";
 
@@ -305,6 +316,31 @@ export type HistorySlot = {
     download_time: number,
     fail_message: string,
     nzb_blob_id?: string,
+}
+
+export type PlaybackAttemptOutcome =
+    | "PreVerifyAvailable"
+    | "PreVerifyDead"
+    | "PreVerifyTimeout"
+    | "Cancelled"
+    | "EnqueueFailed"
+    | "QueueFailed"
+    | "QueueCompleted"
+    | "BudgetTimeout";
+
+export type PlaybackAttempt = {
+    clickId: string,
+    attemptedAtUnix: number,
+    contentType: string,
+    requestedTitle: string,
+    candidateTitle: string,
+    indexerName: string,
+    size: number,
+    rankIndex: number,
+    outcome: PlaybackAttemptOutcome,
+    failReason: string | null,
+    durationMs: number,
+    isWinner: boolean,
 }
 
 export type DirectoryItem = {
