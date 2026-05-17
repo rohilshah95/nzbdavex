@@ -11,7 +11,7 @@ namespace NzbWebDAV.Config;
 
 public class ConfigManager
 {
-    public static readonly string AppVersion = EnvironmentUtil.GetEnvironmentVariable("NZBDAV_VERSION") ?? "unknown";
+    public static readonly string AppVersion = EnvironmentUtil.GetEnvironmentVariable("NZBDAV_VERSION") ?? "0.0.0";
 
     private readonly Dictionary<string, string> _config = new();
     public event EventHandler<ConfigEventArgs>? OnConfigChanged;
