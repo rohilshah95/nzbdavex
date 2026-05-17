@@ -12,5 +12,6 @@ public class IndexerConfig
         public bool Enabled { get; set; } = true;
         public string? UserAgent { get; set; }
         public int MaxRequestsPerMinute { get; set; } = 0;
+        public bool EnableStrictMatching { get; set; } = false;
     }
 }

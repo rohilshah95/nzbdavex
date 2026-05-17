@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using NzbWebDAV.Clients.Indexers;
 using NzbWebDAV.Config;
 using NzbWebDAV.Services;
+using NzbWebDAV.Utils;
 
 namespace NzbWebDAV.Api.Controllers.SearchIndexers;
 
@@ -25,14 +26,16 @@ public class SearchIndexersController(ConfigManager configManager, NewznabRateLi
                 await rateLimiter.WaitAsync(x.Name, x.MaxRequestsPerMinute, ct).ConfigureAwait(false);
                 var client = new NewznabClient(x.Url, x.ApiKey, ua);
                 var items = await client.SearchAsync(request.Query, request.Limit, ct).ConfigureAwait(false);
-                var mapped = items.Select(i => new SearchIndexersResponse.Result
-                {
-                    Indexer = x.Name,
-                    Title = i.Title,
-                    NzbUrl = i.NzbUrl,
-                    Size = i.Size,
-                    Posted = i.Posted,
-                }).ToList();
+                var mapped = items
+                    .Where(i => !x.EnableStrictMatching || FilenameMatcher.Matches(request.Query, i.Title))
+                    .Select(i => new SearchIndexersResponse.Result
+                    {
+                        Indexer = x.Name,
+                        Title = i.Title,
+                        NzbUrl = i.NzbUrl,
+                        Size = i.Size,
+                        Posted = i.Posted,
+                    }).ToList();
                 return (Status: new SearchIndexersResponse.IndexerStatus
                 {
                     Name = x.Name,

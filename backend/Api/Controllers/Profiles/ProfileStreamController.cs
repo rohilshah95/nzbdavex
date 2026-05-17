@@ -3,6 +3,7 @@ using NzbWebDAV.Clients.Indexers;
 using NzbWebDAV.Config;
 using NzbWebDAV.Extensions;
 using NzbWebDAV.Services;
+using NzbWebDAV.Utils;
 
 namespace NzbWebDAV.Api.Controllers.Profiles;
 
@@ -66,6 +67,34 @@ public class ProfileStreamController(
             .OrderByDescending(x => x.item.Size)
             .ThenByDescending(x => x.item.Posted ?? DateTimeOffset.MinValue)
             .ToList();
+
+        var strictIndexers = indexers
+            .Where(x => x.EnableStrictMatching)
+            .Select(x => x.Name)
+            .ToHashSet();
+
+        if (strictIndexers.Count > 0 && deduped.Count >= 2)
+        {
+            var withHead = deduped
+                .Select(x => new { Entry = x, Head = FilenameMatcher.HeadTokens(x.item.Title) })
+                .ToList();
+
+            var consensus = withHead
+                .Where(x => x.Head.Length > 0)
+                .GroupBy(x => string.Join(' ', x.Head))
+                .Select(g => new { g.First().Head, Count = g.Count() })
+                .OrderByDescending(x => x.Count)
+                .FirstOrDefault();
+
+            if (consensus is { Count: >= 2 })
+            {
+                deduped = withHead
+                    .Where(x => !strictIndexers.Contains(x.Entry.indexer)
+                                || FilenameMatcher.TokensEqual(x.Head, consensus.Head))
+                    .Select(x => x.Entry)
+                    .ToList();
+            }
+        }
 
         if (deduped.Count == 0) return new JsonResult(new { streams = Array.Empty<object>() });
 

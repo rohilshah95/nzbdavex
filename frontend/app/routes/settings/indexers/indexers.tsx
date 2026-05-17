@@ -14,6 +14,7 @@ interface ConnectionDetails {
     Enabled: boolean;
     UserAgent?: string;
     MaxRequestsPerMinute?: number;
+    EnableStrictMatching?: boolean;
 }
 
 interface IndexerConfig {
@@ -40,7 +41,7 @@ export function IndexersSettings({ config, setNewConfig }: IndexersSettingsProps
         update({
             Indexers: [
                 ...indexerConfig.Indexers,
-                { Name: "", Url: "", ApiKey: "", Enabled: true, UserAgent: "", MaxRequestsPerMinute: 0 }
+                { Name: "", Url: "", ApiKey: "", Enabled: true, UserAgent: "", MaxRequestsPerMinute: 0, EnableStrictMatching: false }
             ]
         });
     }, [indexerConfig, update]);
@@ -180,6 +181,11 @@ function IndexerForm({ instance, index, onChange, onRemove }: IndexerFormProps) 
                     label="Enabled"
                     checked={instance.Enabled}
                     onChange={e => onChange(index, 'Enabled', e.target.checked)} />
+                <Form.Check
+                    type="switch"
+                    label={<>Strict matching <span style={{ opacity: 0.6, fontWeight: 'normal' }}>(drop results whose title doesn't match the request)</span></>}
+                    checked={instance.EnableStrictMatching ?? false}
+                    onChange={e => onChange(index, 'EnableStrictMatching', e.target.checked)} />
             </Card.Body>
         </Card>
     );
