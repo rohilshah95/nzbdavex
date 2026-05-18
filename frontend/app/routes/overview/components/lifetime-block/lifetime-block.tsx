@@ -13,7 +13,7 @@ export type LifetimeBlockProps = {
 };
 
 export function LifetimeBlock({ lifetime }: LifetimeBlockProps) {
-    const isEmpty = lifetime.bytesFetched === 0 && lifetime.bytesRead === 0 && lifetime.articles === 0;
+    const isEmpty = lifetime.bytesRead === 0 && lifetime.articles === 0;
 
     return (
         <div className={styles.container}>
@@ -23,23 +23,22 @@ export function LifetimeBlock({ lifetime }: LifetimeBlockProps) {
             </div>
 
             {isEmpty ? (
-                <div className={styles.empty}>Lifetime totals appear after your first fetches.</div>
+                <div className={styles.empty}>Lifetime totals appear after your first reads.</div>
             ) : (
                 <div className={styles.grid}>
-                    <Tile label="Downloaded" value={formatBytes(lifetime.bytesFetched)} accent />
-                    <Tile label="Read" value={formatBytes(lifetime.bytesRead)} />
+                    <Tile label="Read" value={formatBytes(lifetime.bytesRead)} accent />
                     <Tile label="Articles" value={formatNumber(lifetime.articles)} />
                     <Tile label="Read sessions" value={formatNumber(lifetime.readSessions)} />
-                    <Tile label="Active-reads time" value={formatHours(lifetime.readSeconds)} fullWidth />
+                    <Tile label="Active-reads time" value={formatHours(lifetime.readSeconds)} />
                 </div>
             )}
         </div>
     );
 }
 
-function Tile({ label, value, accent, fullWidth }: { label: string, value: string, accent?: boolean, fullWidth?: boolean }) {
+function Tile({ label, value, accent }: { label: string, value: string, accent?: boolean }) {
     return (
-        <div className={`${styles.cell} ${fullWidth ? styles.full : ""} ${accent ? styles.accent : ""}`}>
+        <div className={`${styles.cell} ${accent ? styles.accent : ""}`}>
             <div className={styles.label}>{label}</div>
             <div className={styles.value}>{value}</div>
         </div>

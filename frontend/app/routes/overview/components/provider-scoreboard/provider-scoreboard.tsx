@@ -27,7 +27,7 @@ export function ProviderScoreboard({ providers, window }: ProviderScoreboardProp
                             <th>Provider</th>
                             <th className={styles.sparkCol}>Activity</th>
                             <th className={styles.numCol}>Articles</th>
-                            <th className={styles.numCol}>Downloaded</th>
+                            <th className={styles.numCol}>Read</th>
                             <th className={styles.numCol}>Share</th>
                             <th className={styles.numCol}>Errors</th>
                             <th className={styles.numCol}>Retries</th>
