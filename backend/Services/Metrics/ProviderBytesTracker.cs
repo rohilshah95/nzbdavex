@@ -1,0 +1,57 @@
+using System.Collections.Concurrent;
+
+namespace NzbWebDAV.Services.Metrics;
+
+/// <summary>
+/// Tracks bytes pulled from each provider in near-real time. The byte count is
+/// unknown when a SegmentFetch row is queued because bytes flow lazily through
+/// the YencStream after the fetch returns; this service captures them as the
+/// stream is read and folds them into ProviderMinute on the next rollup tick.
+///
+/// Two pieces of state:
+///   - _buckets keyed by (minute, host) -> bytes, drained by the rollup service
+///   - _lifetime keyed by host -> total bytes, exposed for "all-time" tiles
+/// </summary>
+public sealed class ProviderBytesTracker
+{
+    private const long OneMinute = 60_000;
+
+    private readonly ConcurrentDictionary<(long Minute, string Host), long> _buckets = new();
+    private readonly ConcurrentDictionary<string, long> _lifetime = new();
+    private long _lifetimeAll;
+
+    public void Add(string host, long bytes)
+    {
+        if (bytes <= 0 || string.IsNullOrEmpty(host)) return;
+        var minute = NowMinute();
+        _buckets.AddOrUpdate((minute, host), bytes, (_, prev) => prev + bytes);
+        _lifetime.AddOrUpdate(host, bytes, (_, prev) => prev + bytes);
+        Interlocked.Add(ref _lifetimeAll, bytes);
+    }
+
+    public long LifetimeAll => Interlocked.Read(ref _lifetimeAll);
+
+    public IReadOnlyDictionary<string, long> LifetimeByHost => _lifetime;
+
+    /// <summary>
+    /// Pop all buckets whose minute is strictly older than <paramref name="cutoffMinute"/>.
+    /// Returned in stable order so callers can apply them transactionally.
+    /// </summary>
+    public List<(long Minute, string Host, long Bytes)> DrainClosed(long cutoffMinute)
+    {
+        var drained = new List<(long, string, long)>();
+        foreach (var key in _buckets.Keys)
+        {
+            if (key.Minute >= cutoffMinute) continue;
+            if (_buckets.TryRemove(key, out var bytes))
+                drained.Add((key.Minute, key.Host, bytes));
+        }
+        return drained;
+    }
+
+    private static long NowMinute()
+    {
+        var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        return nowMs - (nowMs % OneMinute);
+    }
+}

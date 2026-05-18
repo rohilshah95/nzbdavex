@@ -6,6 +6,7 @@ using NzbWebDAV.Extensions;
 using NzbWebDAV.Models;
 using NzbWebDAV.Services;
 using NzbWebDAV.Services.Metrics;
+using NzbWebDAV.Streams;
 using Serilog;
 using UsenetSharp.Models;
 
@@ -14,7 +15,8 @@ namespace NzbWebDAV.Clients.Usenet;
 public class MultiProviderNntpClient(
     List<MultiConnectionNntpClient> providers,
     ProviderUsageTracker usageTracker,
-    MetricsWriter? metricsWriter = null
+    MetricsWriter? metricsWriter = null,
+    ProviderBytesTracker? bytesTracker = null
 ) : NntpClient
 {
     private static readonly AsyncLocal<Guid?> ReadSessionScope = new();
@@ -200,6 +202,7 @@ public class MultiProviderNntpClient(
                 {
                     usageTracker.RecordSuccess(provider.Host);
                     RecordFetch(provider.Host, SegmentFetch.FetchStatus.Ok, stopwatch.ElapsedMilliseconds, i);
+                    result = WrapStreamForByteCounting(result, provider.Host);
                 }
                 else
                 {
@@ -228,11 +231,24 @@ public class MultiProviderNntpClient(
             At = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
             Provider = host,
             ReadSessionId = ReadSessionScope.Value,
-            Bytes = 0, // bytes flow through a lazy stream after this point; counted on the read session
+            Bytes = 0, // bytes flow lazily through CountingYencStream → ProviderBytesTracker
             DurationMs = (int)Math.Min(int.MaxValue, durationMs),
             Status = status,
             Retries = retries,
         });
+    }
+
+    private T WrapStreamForByteCounting<T>(T result, string host) where T : UsenetResponse
+    {
+        if (bytesTracker == null) return result;
+        return result switch
+        {
+            UsenetDecodedBodyResponse b
+                => (T)(object)(b with { Stream = new CountingYencStream(b.Stream, bytesTracker, host) }),
+            UsenetDecodedArticleResponse a
+                => (T)(object)(a with { Stream = new CountingYencStream(a.Stream, bytesTracker, host) }),
+            _ => result,
+        };
     }
 
     private static SegmentFetch.FetchStatus ClassifyException(Exception ex)

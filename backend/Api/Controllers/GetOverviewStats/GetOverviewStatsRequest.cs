@@ -15,9 +15,11 @@ public class GetOverviewStatsRequest
         if (w is null) return;
         Window = w.ToLowerInvariant() switch
         {
-            "7d" => OverviewWindow.Last7Days,
             "24h" => OverviewWindow.Last24Hours,
-            _ => throw new BadHttpRequestException("Invalid window parameter (use 24h or 7d)")
+            "7d" => OverviewWindow.Last7Days,
+            "30d" => OverviewWindow.Last30Days,
+            "all" => OverviewWindow.AllTime,
+            _ => throw new BadHttpRequestException("Invalid window parameter (use 24h, 7d, 30d, or all)")
         };
     }
 
@@ -25,5 +27,7 @@ public class GetOverviewStatsRequest
     {
         Last24Hours,
         Last7Days,
+        Last30Days,
+        AllTime,
     }
 }

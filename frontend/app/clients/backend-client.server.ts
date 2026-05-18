@@ -280,7 +280,7 @@ class BackendClient {
         return data;
     }
 
-    public async getOverviewStats(window: "24h" | "7d" = "24h"): Promise<OverviewStatsResponse> {
+    public async getOverviewStats(window: OverviewWindow = "24h"): Promise<OverviewStatsResponse> {
         const url = `${process.env.BACKEND_URL}/api/get-overview-stats?window=${window}`;
         const apiKey = process.env.FRONTEND_BACKEND_API_KEY || "";
         const response = await fetch(url, {
@@ -459,8 +459,10 @@ export enum RepairAction {
     ActionNeeded = 3,
 }
 
+export type OverviewWindow = "24h" | "7d" | "30d" | "all";
+
 export type OverviewStatsResponse = {
-    window: "24h" | "7d",
+    window: OverviewWindow,
     tiles: {
         activeReads: number,
         articlesPerMinute: number,
@@ -470,6 +472,7 @@ export type OverviewStatsResponse = {
     throughput: ThroughputPoint[],
     totalArticles: number,
     totalErrors: number,
+    totalBytesFetched: number,
     providers: ProviderRow[],
     catalogue: {
         fileCount: number,
@@ -497,6 +500,20 @@ export type OverviewStatsResponse = {
     },
     errors: ErrorSlice[],
     indexers: IndexerRow[],
+    lifetime: {
+        bytesFetched: number,
+        bytesRead: number,
+        articles: number,
+        readSessions: number,
+        readSeconds: number,
+        firstSeenAt: number | null,
+    },
+    records: {
+        bestDayBytes: number,
+        bestDayAt: number | null,
+        bestHourBytes: number,
+        bestHourAt: number | null,
+    },
 }
 
 export type ThroughputPoint = {

@@ -12,8 +12,9 @@ public class UsenetStreamingClient : WrappingNntpClient
         ConfigManager configManager,
         WebsocketManager websocketManager,
         ProviderUsageTracker usageTracker,
-        MetricsWriter metricsWriter)
-        : base(CreateDownloadingNntpClient(configManager, websocketManager, usageTracker, metricsWriter))
+        MetricsWriter metricsWriter,
+        ProviderBytesTracker bytesTracker)
+        : base(CreateDownloadingNntpClient(configManager, websocketManager, usageTracker, metricsWriter, bytesTracker))
     {
         // when config changes, create a new MultiProviderClient to use instead.
         configManager.OnConfigChanged += (_, configEventArgs) =>
@@ -22,7 +23,7 @@ public class UsenetStreamingClient : WrappingNntpClient
             if (!configEventArgs.ChangedConfig.ContainsKey("usenet.providers")) return;
 
             // update the connection-pool according to the new config
-            var newUsenetClient = CreateDownloadingNntpClient(configManager, websocketManager, usageTracker, metricsWriter);
+            var newUsenetClient = CreateDownloadingNntpClient(configManager, websocketManager, usageTracker, metricsWriter, bytesTracker);
             ReplaceUnderlyingClient(newUsenetClient);
         };
     }
@@ -32,10 +33,11 @@ public class UsenetStreamingClient : WrappingNntpClient
         ConfigManager configManager,
         WebsocketManager websocketManager,
         ProviderUsageTracker usageTracker,
-        MetricsWriter metricsWriter
+        MetricsWriter metricsWriter,
+        ProviderBytesTracker bytesTracker
     )
     {
-        var multiProviderClient = CreateMultiProviderClient(configManager, websocketManager, usageTracker, metricsWriter);
+        var multiProviderClient = CreateMultiProviderClient(configManager, websocketManager, usageTracker, metricsWriter, bytesTracker);
         return new DownloadingNntpClient(multiProviderClient, configManager);
     }
 
@@ -44,7 +46,8 @@ public class UsenetStreamingClient : WrappingNntpClient
         ConfigManager configManager,
         WebsocketManager websocketManager,
         ProviderUsageTracker usageTracker,
-        MetricsWriter metricsWriter
+        MetricsWriter metricsWriter,
+        ProviderBytesTracker bytesTracker
     )
     {
         var providerConfig = configManager.GetUsenetProviderConfig();
@@ -55,7 +58,7 @@ public class UsenetStreamingClient : WrappingNntpClient
                 connectionPoolStats.GetOnConnectionPoolChanged(index)
             ))
             .ToList();
-        return new MultiProviderNntpClient(providerClients, usageTracker, metricsWriter);
+        return new MultiProviderNntpClient(providerClients, usageTracker, metricsWriter, bytesTracker);
     }
 
     private static MultiConnectionNntpClient CreateProviderClient

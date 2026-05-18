@@ -1,6 +1,6 @@
 import { useMemo, useState, useCallback } from "react";
 import styles from "./throughput-chart.module.css";
-import type { ThroughputPoint } from "~/clients/backend-client.server";
+import type { OverviewWindow, ThroughputPoint } from "~/clients/backend-client.server";
 import { formatBytes, formatNumber } from "../../utils/format";
 
 export type ThroughputChartProps = {
@@ -8,7 +8,7 @@ export type ThroughputChartProps = {
     totalArticles: number,
     totalErrors: number,
     totalBytesServed: number,
-    window: "24h" | "7d",
+    window: OverviewWindow,
 }
 
 const VB_W = 800;
@@ -78,7 +78,7 @@ export function ThroughputChart({ points, totalArticles, totalErrors, totalBytes
     };
 
     const hasData = points.length > 0 && maxArticles > 0;
-    const bucketLabel = window === "7d" ? "hour" : "min";
+    const bucketLabel = window === "24h" ? "min" : (window === "all" ? "day" : "hour");
     const hover = hoverIdx !== null ? points[hoverIdx] : null;
 
     return (
@@ -191,13 +191,20 @@ function Total({ label, value, accent }: { label: string, value: string, accent?
     );
 }
 
-function formatBucketTime(ms: number, window: "24h" | "7d"): string {
+function formatBucketTime(ms: number, window: OverviewWindow): string {
     const d = new Date(ms);
-    const hh = String(d.getHours()).padStart(2, "0");
-    const mm = String(d.getMinutes()).padStart(2, "0");
+    if (window === "24h") {
+        const hh = String(d.getHours()).padStart(2, "0");
+        const mm = String(d.getMinutes()).padStart(2, "0");
+        return `${hh}:${mm}`;
+    }
     if (window === "7d") {
         const day = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()];
+        const hh = String(d.getHours()).padStart(2, "0");
         return `${day} ${hh}:00`;
     }
-    return `${hh}:${mm}`;
+    // 30d and all-time: show day-month so the x-axis spans many days clearly.
+    const day = String(d.getDate()).padStart(2, "0");
+    const mon = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getMonth()];
+    return `${day} ${mon}`;
 }

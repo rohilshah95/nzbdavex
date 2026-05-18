@@ -7,6 +7,7 @@ public class GetOverviewStatsResponse
     public List<ThroughputPoint> Throughput { get; init; } = new();
     public long TotalArticles { get; init; }
     public long TotalErrors { get; init; }
+    public long TotalBytesFetched { get; init; }
     public List<ProviderRow> Providers { get; init; } = new();
     public CatalogueBlock Catalogue { get; init; } = new();
     public SessionsBlock Sessions { get; init; } = new();
@@ -16,6 +17,8 @@ public class GetOverviewStatsResponse
     public LatencyBlock Latency { get; init; } = new();
     public List<ErrorSlice> Errors { get; init; } = new();
     public List<IndexerRow> Indexers { get; init; } = new();
+    public LifetimeBlock Lifetime { get; init; } = new();
+    public RecordsBlock Records { get; init; } = new();
 
     public class LiveTiles
     {
@@ -113,5 +116,31 @@ public class GetOverviewStatsResponse
         public long BytesCompleted { get; init; }
         public int AvgSeconds { get; init; }
         public double SuccessRate { get; init; }
+    }
+
+    /// <summary>
+    /// All-time totals across every minute the metrics database has retained. Values
+    /// only grow; the dashboard renders them as the big "your forever stats" tiles.
+    /// </summary>
+    public class LifetimeBlock
+    {
+        public long BytesFetched { get; init; }
+        public long BytesRead { get; init; }
+        public long Articles { get; init; }
+        public long ReadSessions { get; init; }
+        public long ReadSeconds { get; init; }
+        public long? FirstSeenAt { get; init; }
+    }
+
+    /// <summary>
+    /// Personal-best records — "your busiest day", "your busiest hour". Bytes-fetched
+    /// here is what the providers actually delivered (downstream of the byte tracker).
+    /// </summary>
+    public class RecordsBlock
+    {
+        public long BestDayBytes { get; init; }
+        public long? BestDayAt { get; init; }
+        public long BestHourBytes { get; init; }
+        public long? BestHourAt { get; init; }
     }
 }

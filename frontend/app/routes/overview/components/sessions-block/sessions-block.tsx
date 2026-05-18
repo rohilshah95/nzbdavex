@@ -1,4 +1,5 @@
 import styles from "./sessions-block.module.css";
+import type { OverviewWindow } from "~/clients/backend-client.server";
 import { formatBytes, formatNumber } from "../../utils/format";
 
 export type SessionsBlockProps = {
@@ -9,7 +10,7 @@ export type SessionsBlockProps = {
         longestDurationMs: number,
         biggestReadBytes: number,
     },
-    window: "24h" | "7d",
+    window: OverviewWindow,
 }
 
 export function SessionsBlock({ sessions, window }: SessionsBlockProps) {
@@ -17,7 +18,7 @@ export function SessionsBlock({ sessions, window }: SessionsBlockProps) {
         <div className={styles.container}>
             <div className={styles.header}>
                 <h3 className={styles.title}>Read sessions</h3>
-                <div className={styles.sub}>Last {window}</div>
+                <div className={styles.sub}>{window === "all" ? "All time" : `Last ${window}`}</div>
             </div>
 
             {sessions.count === 0 ? (

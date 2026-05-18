@@ -1,6 +1,6 @@
 import type { Route } from "./+types/route";
 import styles from "./route.module.css";
-import { backendClient, type LiveStatsMessage, type OverviewStatsResponse } from "~/clients/backend-client.server";
+import { backendClient, type LiveStatsMessage, type OverviewStatsResponse, type OverviewWindow } from "~/clients/backend-client.server";
 import { useCallback, useEffect, useState } from "react";
 import { receiveMessage } from "~/utils/websocket-util";
 import { LiveTiles } from "./components/live-tiles/live-tiles";
@@ -13,6 +13,8 @@ import { ProviderScoreboard } from "./components/provider-scoreboard/provider-sc
 import { IndexerScoreboard } from "./components/indexer-scoreboard/indexer-scoreboard";
 import { SessionsBlock } from "./components/sessions-block/sessions-block";
 import { CatalogueBlock } from "./components/catalogue-block/catalogue-block";
+import { LifetimeBlock } from "./components/lifetime-block/lifetime-block";
+import { RecordsBlock } from "./components/records-block/records-block";
 
 const topicNames = {
     liveStats: 'ls',
@@ -21,6 +23,13 @@ const topicSubscriptions = {
     [topicNames.liveStats]: 'state',
 };
 
+const WINDOWS: { value: OverviewWindow, label: string }[] = [
+    { value: "24h", label: "24h" },
+    { value: "7d", label: "7d" },
+    { value: "30d", label: "30d" },
+    { value: "all", label: "All" },
+];
+
 export async function loader() {
     const stats = await backendClient.getOverviewStats("24h");
     return { stats };
@@ -28,9 +37,10 @@ export async function loader() {
 
 export default function Overview({ loaderData }: Route.ComponentProps) {
     const [stats, setStats] = useState<OverviewStatsResponse>(loaderData.stats);
-    const [window, setWindow] = useState<"24h" | "7d">("24h");
+    const [window, setWindow] = useState<OverviewWindow>("24h");
 
     const liveTiles = stats.tiles;
+    const isLongWindow = window === "30d" || window === "all";
 
     // Re-fetch on window change + every 30s so chart, heatmap, providers, etc.
     // stay fresh without manual refresh. Skipped when the tab is hidden so
@@ -93,24 +103,31 @@ export default function Overview({ loaderData }: Route.ComponentProps) {
             <div className={styles.header}>
                 <h2 className={styles.title}>Overview</h2>
                 <div className={styles.windowToggle} role="tablist">
-                    <button
-                        role="tab"
-                        aria-selected={window === "24h"}
-                        className={window === "24h" ? styles.windowActive : styles.windowOption}
-                        onClick={() => setWindow("24h")}>24h</button>
-                    <button
-                        role="tab"
-                        aria-selected={window === "7d"}
-                        className={window === "7d" ? styles.windowActive : styles.windowOption}
-                        onClick={() => setWindow("7d")}>7d</button>
+                    {WINDOWS.map(w => (
+                        <button
+                            key={w.value}
+                            role="tab"
+                            aria-selected={window === w.value}
+                            className={window === w.value ? styles.windowActive : styles.windowOption}
+                            onClick={() => setWindow(w.value)}>{w.label}</button>
+                    ))}
                 </div>
             </div>
 
             <LiveTiles tiles={liveTiles} />
 
+            <LifetimeBlock lifetime={stats.lifetime} />
+
+            <div className={styles.twoCol}>
+                <RecordsBlock records={stats.records} />
+                <CatalogueBlock catalogue={stats.catalogue} />
+            </div>
+
             <LiveReadsPanel />
 
-            <ActivityHeatmap maxCell={stats.heatmap.maxCell} cells={stats.heatmap.cells} />
+            {!isLongWindow && (
+                <ActivityHeatmap maxCell={stats.heatmap.maxCell} cells={stats.heatmap.cells} />
+            )}
 
             <ThroughputChart
                 points={stats.throughput}
@@ -120,24 +137,24 @@ export default function Overview({ loaderData }: Route.ComponentProps) {
                 window={window}
             />
 
-            <LatencyHistogram
-                p50Ms={stats.latency.p50Ms}
-                p95Ms={stats.latency.p95Ms}
-                p99Ms={stats.latency.p99Ms}
-                samples={stats.latency.samples}
-                buckets={stats.latency.buckets}
-            />
+            {!isLongWindow && (
+                <LatencyHistogram
+                    p50Ms={stats.latency.p50Ms}
+                    p95Ms={stats.latency.p95Ms}
+                    p99Ms={stats.latency.p99Ms}
+                    samples={stats.latency.samples}
+                    buckets={stats.latency.buckets}
+                />
+            )}
 
             <div className={styles.twoCol}>
-                <ErrorDonut errors={stats.errors} />
+                {!isLongWindow && <ErrorDonut errors={stats.errors} />}
                 <SessionsBlock sessions={stats.sessions} window={window} />
             </div>
 
             <ProviderScoreboard providers={stats.providers} window={window} />
 
             <IndexerScoreboard indexers={stats.indexers} />
-
-            <CatalogueBlock catalogue={stats.catalogue} />
         </div>
     );
 }

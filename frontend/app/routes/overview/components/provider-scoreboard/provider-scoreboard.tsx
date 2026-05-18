@@ -1,10 +1,10 @@
 import styles from "./provider-scoreboard.module.css";
-import type { ProviderRow } from "~/clients/backend-client.server";
-import { formatNumber, formatPercent } from "../../utils/format";
+import type { OverviewWindow, ProviderRow } from "~/clients/backend-client.server";
+import { formatBytes, formatNumber, formatPercent } from "../../utils/format";
 
 export type ProviderScoreboardProps = {
     providers: ProviderRow[],
-    window: "24h" | "7d",
+    window: OverviewWindow,
 }
 
 export function ProviderScoreboard({ providers, window }: ProviderScoreboardProps) {
@@ -14,7 +14,7 @@ export function ProviderScoreboard({ providers, window }: ProviderScoreboardProp
         <div className={styles.container}>
             <div className={styles.header}>
                 <h3 className={styles.title}>Providers</h3>
-                <div className={styles.sub}>Per-provider fetches, last {window}</div>
+                <div className={styles.sub}>Per-provider fetches, {window === "all" ? "all time" : `last ${window}`}</div>
             </div>
 
             {providers.length === 0 ? (
@@ -27,6 +27,7 @@ export function ProviderScoreboard({ providers, window }: ProviderScoreboardProp
                             <th>Provider</th>
                             <th className={styles.sparkCol}>Activity</th>
                             <th className={styles.numCol}>Articles</th>
+                            <th className={styles.numCol}>Downloaded</th>
                             <th className={styles.numCol}>Share</th>
                             <th className={styles.numCol}>Errors</th>
                             <th className={styles.numCol}>Retries</th>
@@ -48,6 +49,7 @@ export function ProviderScoreboard({ providers, window }: ProviderScoreboardProp
                                         <Sparkline values={p.spark} />
                                     </td>
                                     <td className={styles.numCol}>{formatNumber(p.articles)}</td>
+                                    <td className={styles.numCol}>{formatBytes(p.bytesFetched)}</td>
                                     <td className={styles.numCol}>
                                         <div className={styles.shareBar}>
                                             <div className={styles.shareFill} style={{ width: `${share.toFixed(1)}%` }} />

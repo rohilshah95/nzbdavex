@@ -119,6 +119,7 @@ class Program
             .AddSingleton<TvdbIdResolver>()
             .AddSingleton<MetricsWriter>()
             .AddHostedService(sp => sp.GetRequiredService<MetricsWriter>())
+            .AddSingleton<ProviderBytesTracker>()
             .AddHostedService<MetricsRollupService>()
             .AddHostedService<MetricsRetentionService>()
             .AddSingleton<LiveStatsBroadcaster>()
