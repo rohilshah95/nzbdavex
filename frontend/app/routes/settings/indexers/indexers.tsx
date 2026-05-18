@@ -7,6 +7,29 @@ type IndexersSettingsProps = {
     setNewConfig: Dispatch<SetStateAction<Record<string, string>>>
 };
 
+interface ResultFilter {
+    Enabled: boolean;
+    SkipPassworded: boolean;
+    MinGrabs: number;
+    GrabsGraceHours: number;
+    MaxAgeDaysWithoutGrabs: number;
+    PreferDownloaded: boolean;
+}
+
+// Optimised baseline. Used both as the initial UI state when an indexer has no Filter
+// yet AND as the comparison baseline that decides whether to omit the Filter object from
+// the saved JSON (so users who never touch this section keep a clean config). The master
+// toggle (`Enabled`) starts off — the rest are the values that take effect the moment a
+// user flips it on, without them having to think about any sub-setting.
+const OPTIMISED_DEFAULTS: ResultFilter = {
+    Enabled: false,
+    SkipPassworded: true,
+    MinGrabs: 1,
+    GrabsGraceHours: 6,
+    MaxAgeDaysWithoutGrabs: 14,
+    PreferDownloaded: true,
+};
+
 interface ConnectionDetails {
     Name: string;
     Url: string;
@@ -15,6 +38,7 @@ interface ConnectionDetails {
     UserAgent?: string;
     MaxRequestsPerMinute?: number;
     EnableStrictMatching?: boolean;
+    Filter?: ResultFilter;
 }
 
 interface IndexerConfig {
@@ -238,6 +262,20 @@ function IndexerCard({ indexer, onEdit, onToggle, onDelete }: IndexerCardProps) 
                                 <span className={styles["indexer-detail-value"]} title={indexer.UserAgent ?? ""}>{userAgent}</span>
                             </div>
                         </div>
+
+                        <div className={styles["indexer-detail-item"]}>
+                            <div className={styles["indexer-detail-icon"]}>
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+                                </svg>
+                            </div>
+                            <div className={styles["indexer-detail-content"]}>
+                                <span className={styles["indexer-detail-label"]}>Result filtering</span>
+                                <span className={styles["indexer-detail-value"]}>
+                                    {indexer.Filter?.Enabled ? "Enabled" : "Disabled"}
+                                </span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -261,6 +299,22 @@ function IndexerModal({ show, indexer, onClose, onSave }: IndexerModalProps) {
     const [enabled, setEnabled] = useState(true);
     const [strict, setStrict] = useState(false);
 
+    const [filterEnabled, setFilterEnabled] = useState(false);
+    const [filterAdvancedOpen, setFilterAdvancedOpen] = useState(false);
+    const [filterSkipPassworded, setFilterSkipPassworded] = useState(OPTIMISED_DEFAULTS.SkipPassworded);
+    const [filterMinGrabs, setFilterMinGrabs] = useState(OPTIMISED_DEFAULTS.MinGrabs.toString());
+    const [filterGrabsGraceHours, setFilterGrabsGraceHours] = useState(OPTIMISED_DEFAULTS.GrabsGraceHours.toString());
+    const [filterMaxAgeDaysWithoutGrabs, setFilterMaxAgeDaysWithoutGrabs] = useState(OPTIMISED_DEFAULTS.MaxAgeDaysWithoutGrabs.toString());
+    const [filterPreferDownloaded, setFilterPreferDownloaded] = useState(OPTIMISED_DEFAULTS.PreferDownloaded);
+
+    const resetFilterToDefaults = useCallback(() => {
+        setFilterSkipPassworded(OPTIMISED_DEFAULTS.SkipPassworded);
+        setFilterMinGrabs(OPTIMISED_DEFAULTS.MinGrabs.toString());
+        setFilterGrabsGraceHours(OPTIMISED_DEFAULTS.GrabsGraceHours.toString());
+        setFilterMaxAgeDaysWithoutGrabs(OPTIMISED_DEFAULTS.MaxAgeDaysWithoutGrabs.toString());
+        setFilterPreferDownloaded(OPTIMISED_DEFAULTS.PreferDownloaded);
+    }, []);
+
     const [testState, setTestState] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
 
     useEffect(() => {
@@ -272,6 +326,14 @@ function IndexerModal({ show, indexer, onClose, onSave }: IndexerModalProps) {
             setMaxRpm((indexer?.MaxRequestsPerMinute ?? 0).toString());
             setEnabled(indexer?.Enabled ?? true);
             setStrict(indexer?.EnableStrictMatching ?? false);
+            const f = indexer?.Filter ?? OPTIMISED_DEFAULTS;
+            setFilterEnabled(f.Enabled);
+            setFilterSkipPassworded(f.SkipPassworded);
+            setFilterMinGrabs((f.MinGrabs ?? OPTIMISED_DEFAULTS.MinGrabs).toString());
+            setFilterGrabsGraceHours((f.GrabsGraceHours ?? OPTIMISED_DEFAULTS.GrabsGraceHours).toString());
+            setFilterMaxAgeDaysWithoutGrabs((f.MaxAgeDaysWithoutGrabs ?? OPTIMISED_DEFAULTS.MaxAgeDaysWithoutGrabs).toString());
+            setFilterPreferDownloaded(f.PreferDownloaded);
+            setFilterAdvancedOpen(false);
             setTestState('idle');
         }
     }, [show, indexer]);
@@ -306,6 +368,16 @@ function IndexerModal({ show, indexer, onClose, onSave }: IndexerModalProps) {
 
     const handleSave = useCallback(() => {
         const rpm = parseInt(maxRpm || "0", 10);
+        const clampNonNegInt = (raw: string, fallback: number) => {
+            const n = parseInt(raw || "0", 10);
+            return Number.isFinite(n) && n >= 0 ? n : fallback;
+        };
+        const filterIsClean = !filterEnabled
+            && filterSkipPassworded === OPTIMISED_DEFAULTS.SkipPassworded
+            && clampNonNegInt(filterMinGrabs, OPTIMISED_DEFAULTS.MinGrabs) === OPTIMISED_DEFAULTS.MinGrabs
+            && clampNonNegInt(filterGrabsGraceHours, OPTIMISED_DEFAULTS.GrabsGraceHours) === OPTIMISED_DEFAULTS.GrabsGraceHours
+            && clampNonNegInt(filterMaxAgeDaysWithoutGrabs, OPTIMISED_DEFAULTS.MaxAgeDaysWithoutGrabs) === OPTIMISED_DEFAULTS.MaxAgeDaysWithoutGrabs
+            && filterPreferDownloaded === OPTIMISED_DEFAULTS.PreferDownloaded;
         onSave({
             Name: name.trim(),
             Url: url.trim(),
@@ -314,8 +386,18 @@ function IndexerModal({ show, indexer, onClose, onSave }: IndexerModalProps) {
             UserAgent: userAgent.trim() || undefined,
             MaxRequestsPerMinute: Number.isFinite(rpm) && rpm > 0 ? rpm : 0,
             EnableStrictMatching: strict,
+            Filter: filterIsClean ? undefined : {
+                Enabled: filterEnabled,
+                SkipPassworded: filterSkipPassworded,
+                MinGrabs: clampNonNegInt(filterMinGrabs, 0),
+                GrabsGraceHours: clampNonNegInt(filterGrabsGraceHours, 6),
+                MaxAgeDaysWithoutGrabs: clampNonNegInt(filterMaxAgeDaysWithoutGrabs, 0),
+                PreferDownloaded: filterPreferDownloaded,
+            },
         });
-    }, [name, url, apiKey, userAgent, maxRpm, enabled, strict, onSave]);
+    }, [name, url, apiKey, userAgent, maxRpm, enabled, strict,
+        filterEnabled, filterSkipPassworded, filterMinGrabs, filterGrabsGraceHours,
+        filterMaxAgeDaysWithoutGrabs, filterPreferDownloaded, onSave]);
 
     const handleOverlayClick = useCallback((e: React.MouseEvent) => {
         if (e.target === e.currentTarget) onClose();
@@ -437,6 +519,137 @@ function IndexerModal({ show, indexer, onClose, onSave }: IndexerModalProps) {
                                 </label>
                             </div>
                         </div>
+
+                        <div className={`${styles["form-group"]} ${styles["full-width"]}`}>
+                            <div className={styles["form-checkbox-wrapper"]}>
+                                <input
+                                    type="checkbox"
+                                    id="indexer-filter-enabled"
+                                    className={styles["form-checkbox"]}
+                                    checked={filterEnabled}
+                                    onChange={e => setFilterEnabled(e.target.checked)}
+                                />
+                                <label htmlFor="indexer-filter-enabled" className={styles["form-checkbox-label"]}>
+                                    Result filtering <span className={styles["label-hint"]}>(uses indexer-supplied metadata to filter and rank this indexer's results; recommended defaults applied when enabled)</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        {filterEnabled && (
+                            <div className={`${styles["form-group"]} ${styles["full-width"]}`}>
+                                <button
+                                    type="button"
+                                    onClick={() => setFilterAdvancedOpen(o => !o)}
+                                    style={{
+                                        background: "none",
+                                        border: "none",
+                                        padding: 0,
+                                        color: "inherit",
+                                        cursor: "pointer",
+                                        textDecoration: "underline",
+                                        opacity: 0.85,
+                                        fontSize: "0.9em",
+                                    }}
+                                >
+                                    {filterAdvancedOpen ? "Hide advanced" : "Show advanced"}
+                                </button>
+                            </div>
+                        )}
+
+                        {filterEnabled && filterAdvancedOpen && (
+                            <>
+                                <div className={`${styles["form-group"]} ${styles["full-width"]}`}>
+                                    <div className={styles["form-checkbox-wrapper"]}>
+                                        <input
+                                            type="checkbox"
+                                            id="indexer-filter-pw"
+                                            className={styles["form-checkbox"]}
+                                            checked={filterSkipPassworded}
+                                            onChange={e => setFilterSkipPassworded(e.target.checked)}
+                                        />
+                                        <label htmlFor="indexer-filter-pw" className={styles["form-checkbox-label"]}>
+                                            Skip password-protected releases <span className={styles["label-hint"]}>(items the indexer flags as containing a passworded archive)</span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div className={styles["form-group"]}>
+                                    <label htmlFor="indexer-filter-mingrabs" className={styles["form-label"]}>
+                                        Minimum download count <span className={styles["label-hint"]}>(0 = no minimum)</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        id="indexer-filter-mingrabs"
+                                        className={styles["form-input"]}
+                                        placeholder={OPTIMISED_DEFAULTS.MinGrabs.toString()}
+                                        value={filterMinGrabs}
+                                        onChange={e => setFilterMinGrabs(e.target.value.replace(/[^0-9]/g, ""))}
+                                    />
+                                </div>
+
+                                <div className={styles["form-group"]}>
+                                    <label htmlFor="indexer-filter-grace" className={styles["form-label"]}>
+                                        Grace period for new releases <span className={styles["label-hint"]}>(hours; 0 = no grace)</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        id="indexer-filter-grace"
+                                        className={styles["form-input"]}
+                                        placeholder={OPTIMISED_DEFAULTS.GrabsGraceHours.toString()}
+                                        value={filterGrabsGraceHours}
+                                        onChange={e => setFilterGrabsGraceHours(e.target.value.replace(/[^0-9]/g, ""))}
+                                    />
+                                </div>
+
+                                <div className={`${styles["form-group"]} ${styles["full-width"]}`}>
+                                    <label htmlFor="indexer-filter-maxage" className={styles["form-label"]}>
+                                        Drop releases older than this many days with zero downloads <span className={styles["label-hint"]}>(0 = disabled)</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        id="indexer-filter-maxage"
+                                        className={styles["form-input"]}
+                                        placeholder={OPTIMISED_DEFAULTS.MaxAgeDaysWithoutGrabs.toString()}
+                                        value={filterMaxAgeDaysWithoutGrabs}
+                                        onChange={e => setFilterMaxAgeDaysWithoutGrabs(e.target.value.replace(/[^0-9]/g, ""))}
+                                    />
+                                </div>
+
+                                <div className={`${styles["form-group"]} ${styles["full-width"]}`}>
+                                    <div className={styles["form-checkbox-wrapper"]}>
+                                        <input
+                                            type="checkbox"
+                                            id="indexer-filter-prefer"
+                                            className={styles["form-checkbox"]}
+                                            checked={filterPreferDownloaded}
+                                            onChange={e => setFilterPreferDownloaded(e.target.checked)}
+                                        />
+                                        <label htmlFor="indexer-filter-prefer" className={styles["form-checkbox-label"]}>
+                                            Rank by download count <span className={styles["label-hint"]}>(sort results by number of downloads, descending; items without a download count sort below those with one)</span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div className={`${styles["form-group"]} ${styles["full-width"]}`}>
+                                    <button
+                                        type="button"
+                                        onClick={resetFilterToDefaults}
+                                        style={{
+                                            background: "none",
+                                            border: "none",
+                                            padding: 0,
+                                            color: "inherit",
+                                            cursor: "pointer",
+                                            textDecoration: "underline",
+                                            opacity: 0.85,
+                                            fontSize: "0.9em",
+                                        }}
+                                    >
+                                        Reset to recommended defaults
+                                    </button>
+                                </div>
+                            </>
+                        )}
                     </div>
 
                     {testState === 'error' && (

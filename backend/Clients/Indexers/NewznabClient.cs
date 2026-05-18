@@ -61,11 +61,15 @@ public class NewznabClient(string baseUrl, string apiKey, string userAgent = "Nz
 
     private static NewznabItem ParseItem(XElement item)
     {
+        var attrs = item.Elements(Newznab + "attr")
+            .Where(x => x.Attribute("name")?.Value is not null)
+            .ToDictionary(
+                x => x.Attribute("name")!.Value,
+                x => x.Attribute("value")?.Value ?? "",
+                StringComparer.OrdinalIgnoreCase);
+
         var enclosure = item.Element("enclosure");
-        var sizeStr = enclosure?.Attribute("length")?.Value
-                      ?? item.Elements(Newznab + "attr")
-                             .FirstOrDefault(x => x.Attribute("name")?.Value == "size")
-                             ?.Attribute("value")?.Value;
+        var sizeStr = enclosure?.Attribute("length")?.Value ?? GetAttr(attrs, "size");
         long.TryParse(sizeStr, out var size);
 
         var nzbUrl = enclosure?.Attribute("url")?.Value
@@ -75,6 +79,11 @@ public class NewznabClient(string baseUrl, string apiKey, string userAgent = "Nz
         DateTimeOffset? posted = null;
         if (DateTimeOffset.TryParse(item.Element("pubDate")?.Value, out var p)) posted = p;
 
+        DateTimeOffset? usenetDate = null;
+        var udRaw = GetAttr(attrs, "usenetdate");
+        if (!string.IsNullOrEmpty(udRaw) && DateTimeOffset.TryParse(udRaw, out var ud))
+            usenetDate = ud;
+
         return new NewznabItem
         {
             Title = item.Element("title")?.Value ?? "",
@@ -82,7 +91,24 @@ public class NewznabClient(string baseUrl, string apiKey, string userAgent = "Nz
             NzbUrl = nzbUrl,
             Size = size,
             Posted = posted,
+            UsenetDate = usenetDate,
+            Grabs = ParseNonNegInt(GetAttr(attrs, "grabs")),
+            Comments = ParseNonNegInt(GetAttr(attrs, "comments")),
+            Password = ParseNonNegInt(GetAttr(attrs, "password")),
+            Files = ParseNonNegInt(GetAttr(attrs, "files")),
+            Group = GetAttr(attrs, "group"),
+            Poster = GetAttr(attrs, "poster"),
         };
+    }
+
+    private static string? GetAttr(Dictionary<string, string> attrs, string name) =>
+        attrs.TryGetValue(name, out var v) && !string.IsNullOrEmpty(v) ? v : null;
+
+    private static int? ParseNonNegInt(string? raw)
+    {
+        if (string.IsNullOrEmpty(raw)) return null;
+        if (!int.TryParse(raw, out var n)) return null;
+        return n < 0 ? 0 : n;
     }
 
     public class NewznabItem
@@ -92,5 +118,12 @@ public class NewznabClient(string baseUrl, string apiKey, string userAgent = "Nz
         public required string NzbUrl { get; init; }
         public long Size { get; init; }
         public DateTimeOffset? Posted { get; init; }
+        public DateTimeOffset? UsenetDate { get; init; }
+        public int? Grabs { get; init; }
+        public int? Comments { get; init; }
+        public int? Password { get; init; }
+        public int? Files { get; init; }
+        public string? Group { get; init; }
+        public string? Poster { get; init; }
     }
 }

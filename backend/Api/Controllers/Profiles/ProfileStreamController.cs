@@ -42,6 +42,7 @@ public class ProfileStreamController(
         var queryParams = await BuildQueryAsync(type, id, ct).ConfigureAwait(false);
         if (queryParams is null) return new JsonResult(new { streams = Array.Empty<object>() });
 
+        var now = DateTimeOffset.UtcNow;
         var perIndexer = await Task.WhenAll(indexers.Select(async x =>
         {
             try
@@ -50,7 +51,8 @@ public class ProfileStreamController(
                 await rateLimiter.WaitAsync(x.Name, x.MaxRequestsPerMinute, ct).ConfigureAwait(false);
                 var client = new NewznabClient(x.Url, x.ApiKey, ua);
                 var items = await client.QueryAsync(queryParams, ct).ConfigureAwait(false);
-                return items.Select(i => new { indexer = x.Name, userAgent = ua, item = i });
+                var filtered = IndexerResultFilter.Apply(items, x.Filter, now);
+                return filtered.Select(i => new { indexer = x.Name, userAgent = ua, item = i });
             }
             catch
             {
@@ -58,14 +60,25 @@ public class ProfileStreamController(
             }
         })).ConfigureAwait(false);
 
+        var anyPreferDownloaded = indexers.Any(x => x.Filter is { Enabled: true, PreferDownloaded: true });
+
         var baseUrl = HttpContext.GetPublicBaseUrl(configManager.GetBaseUrl());
-        var deduped = perIndexer
+        var dedupedQuery = perIndexer
             .SelectMany(x => x)
             .Where(x => !string.IsNullOrWhiteSpace(x.item.NzbUrl))
             .GroupBy(x => x.item.NzbUrl)
-            .Select(g => g.First())
-            .OrderByDescending(x => x.item.Size)
-            .ThenByDescending(x => x.item.Posted ?? DateTimeOffset.MinValue)
+            .Select(g => g.First());
+
+        // When any indexer opts into PreferDownloaded, grabs becomes the primary sort key
+        // for the merged list (items missing grabs go below honest 0-grab items). Existing
+        // size/date ordering stays as the tiebreaker — and remains the only ordering when
+        // no indexer requests grab-based ranking.
+        var deduped = (anyPreferDownloaded
+                ? dedupedQuery.OrderByDescending(x => x.item.Grabs ?? -1)
+                              .ThenByDescending(x => x.item.Size)
+                              .ThenByDescending(x => x.item.Posted ?? DateTimeOffset.MinValue)
+                : dedupedQuery.OrderByDescending(x => x.item.Size)
+                              .ThenByDescending(x => x.item.Posted ?? DateTimeOffset.MinValue))
             .ToList();
 
         var strictIndexers = indexers
@@ -107,6 +120,9 @@ public class ProfileStreamController(
                 Title = x.item.Title,
                 Size = x.item.Size,
                 Posted = x.item.Posted,
+                UsenetDate = x.item.UsenetDate,
+                Grabs = x.item.Grabs,
+                Password = x.item.Password,
             })
             .ToList();
 

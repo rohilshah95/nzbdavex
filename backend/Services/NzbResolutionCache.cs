@@ -57,6 +57,9 @@ public class NzbResolutionCache
         public required string Title { get; init; }
         public long Size { get; init; }
         public DateTimeOffset? Posted { get; init; }
+        public DateTimeOffset? UsenetDate { get; init; }
+        public int? Grabs { get; init; }
+        public int? Password { get; init; }
     }
 
     public class Entry
