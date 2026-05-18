@@ -189,22 +189,22 @@ public class ConfigManager
     public int GetPlayHedgeDelaySeconds()
     {
         var v = StringUtil.EmptyToNull(GetConfigValue("play.hedge-delay-seconds"));
-        if (v == null) return 3;
-        return int.TryParse(v, out var n) ? Math.Clamp(n, 1, 30) : 3;
+        if (v == null) return 2;
+        return int.TryParse(v, out var n) ? Math.Clamp(n, 1, 30) : 2;
     }
 
     public int GetPlayMaxCandidates()
     {
         var v = StringUtil.EmptyToNull(GetConfigValue("play.max-candidates"));
-        if (v == null) return 3;
-        return int.TryParse(v, out var n) ? Math.Clamp(n, 1, 10) : 3;
+        if (v == null) return 1;
+        return int.TryParse(v, out var n) ? Math.Clamp(n, 1, 10) : 1;
     }
 
     public int GetPlayMaxAttempts()
     {
         var v = StringUtil.EmptyToNull(GetConfigValue("play.max-attempts"));
-        if (v == null) return 10;
-        return int.TryParse(v, out var n) ? Math.Clamp(n, 1, 200) : 10;
+        if (v == null) return 15;
+        return int.TryParse(v, out var n) ? Math.Clamp(n, 1, 200) : 15;
     }
 
     public string GetPlayVerifyMode()
@@ -212,17 +212,17 @@ public class ConfigManager
         var v = StringUtil.EmptyToNull(GetConfigValue("play.verify-mode"));
         return v switch
         {
-            "stat" => "stat",
             "body" => "body",
-            _ => "none",
+            "none" => "none",
+            _ => "stat",
         };
     }
 
     public TimeSpan GetPlayCandidateNegativeCacheTtl()
     {
         var v = StringUtil.EmptyToNull(GetConfigValue("play.candidate-negative-cache-minutes"));
-        if (v == null) return TimeSpan.FromMinutes(5);
-        return int.TryParse(v, out var n) ? TimeSpan.FromMinutes(Math.Clamp(n, 1, 60 * 24)) : TimeSpan.FromMinutes(5);
+        if (v == null) return TimeSpan.FromMinutes(30);
+        return int.TryParse(v, out var n) ? TimeSpan.FromMinutes(Math.Clamp(n, 1, 60 * 24)) : TimeSpan.FromMinutes(30);
     }
 
     // Newline-separated regex patterns. Candidates whose title matches ANY pattern are

@@ -27,7 +27,7 @@ function validateExcludePatterns(raw: string): PatternIssue[] {
 
 export function WatchdogSettings({ config, setNewConfig }: WatchdogSettingsProps) {
     const set = (key: string, value: string) => setNewConfig({ ...config, [key]: value });
-    const verifyMode = config["play.verify-mode"] ?? "none";
+    const verifyMode = config["play.verify-mode"] ?? "stat";
     const enabled = (config["play.watchdog-enabled"] ?? "true") === "true";
     const excludePatterns = config["play.exclude-patterns"] ?? "";
     const patternIssues = useMemo(() => validateExcludePatterns(excludePatterns), [excludePatterns]);
@@ -81,11 +81,11 @@ export function WatchdogSettings({ config, setNewConfig }: WatchdogSettingsProps
                     min={1}
                     max={30}
                     disabled={!enabled}
-                    value={config["play.hedge-delay-seconds"] ?? "3"}
+                    value={config["play.hedge-delay-seconds"] ?? "2"}
                     onChange={e => set("play.hedge-delay-seconds", e.target.value)} />
                 <p className={styles.hint}>
                     If the primary candidate hasn't passed verification by this many seconds, backup
-                    candidates start in parallel. Lower = more eager fallback, slightly higher provider load. Default 3.
+                    candidates start in parallel. Lower = more eager fallback, slightly higher provider load. Default 2.
                 </p>
             </Form.Group>
 
@@ -97,11 +97,12 @@ export function WatchdogSettings({ config, setNewConfig }: WatchdogSettingsProps
                     min={1}
                     max={10}
                     disabled={!enabled}
-                    value={config["play.max-candidates"] ?? "3"}
+                    value={config["play.max-candidates"] ?? "1"}
                     onChange={e => set("play.max-candidates", e.target.value)} />
                 <p className={styles.hint}>
                     How many candidates run at the same time in one round. Higher means faster
-                    failover when a candidate fails, but more simultaneous load. Default 3.
+                    failover when a candidate fails, but more simultaneous indexer requests — too
+                    many in parallel can look like spamming and risk a ban. Default 1.
                 </p>
             </Form.Group>
 
@@ -113,12 +114,12 @@ export function WatchdogSettings({ config, setNewConfig }: WatchdogSettingsProps
                     min={1}
                     max={200}
                     disabled={!enabled}
-                    value={config["play.max-attempts"] ?? "10"}
+                    value={config["play.max-attempts"] ?? "15"}
                     onChange={e => set("play.max-attempts", e.target.value)} />
                 <p className={styles.hint}>
                     The most candidates one attempt will try in total before giving up. With the
-                    defaults (3 per batch, 10 total) it tries up to 3 + 3 + 3 + 1 candidates over
-                    four rounds, then stops. Also stops sooner if the total budget runs out. Default 10.
+                    defaults (1 per batch, 15 total) it tries up to 15 candidates one at a time,
+                    then stops. Also stops sooner if the total budget runs out. Default 15.
                 </p>
             </Form.Group>
 
@@ -129,13 +130,14 @@ export function WatchdogSettings({ config, setNewConfig }: WatchdogSettingsProps
                     disabled={!enabled}
                     value={verifyMode}
                     onChange={e => set("play.verify-mode", e.target.value)}>
-                    <option value="none">none — no pre-check, enqueue right away (recommended)</option>
-                    <option value="stat">stat — STAT first segment (~0.2s; skips candidates flagged dead)</option>
+                    <option value="stat">stat — STAT first segment (~0.2s; skips candidates flagged dead, recommended)</option>
                     <option value="body">body — strict, downloads first article (~1–2s)</option>
+                    <option value="none">none — no pre-check, enqueue right away</option>
                 </Form.Select>
                 <p className={styles.hint}>
-                    `none` is safest: every candidate gets enqueued and falls back to the next on confirmed
-                    failure. `stat` adds a pre-filter but can drop legit releases when providers are slow.
+                    `stat` is the default: a cheap NNTP check against your provider weeds out dead releases
+                    before the queue commits, which avoids re-fetching their NZB from the indexer on every
+                    click. `none` skips the check (faster, but every candidate gets enqueued).
                 </p>
             </Form.Group>
 
@@ -147,11 +149,11 @@ export function WatchdogSettings({ config, setNewConfig }: WatchdogSettingsProps
                     min={1}
                     max={1440}
                     disabled={!enabled}
-                    value={config["play.candidate-negative-cache-minutes"] ?? "5"}
+                    value={config["play.candidate-negative-cache-minutes"] ?? "30"}
                     onChange={e => set("play.candidate-negative-cache-minutes", e.target.value)} />
                 <p className={styles.hint}>
                     How long a recently-failed release is skipped on subsequent clicks, so we don't hammer
-                    the same dead release. Default 5.
+                    the same dead release (and its indexer) over and over. Default 30.
                 </p>
             </Form.Group>
 
