@@ -7,7 +7,7 @@ namespace NzbWebDAV.Services;
 /// Scope is propagated via AsyncLocal so deep async calls inside QueueItemProcessor
 /// pick up the current queue-item id without threading parameters through every layer.
 /// </summary>
-public class ProviderUsageTracker
+public class ProviderUsageTracker(ActiveStreamRegistry? activeStreamRegistry = null)
 {
     private static readonly AsyncLocal<Guid?> CurrentScope = new();
     private readonly ConcurrentDictionary<Guid, ConcurrentDictionary<string, long>> _usage = new();
@@ -25,6 +25,9 @@ public class ProviderUsageTracker
         if (qid == null || string.IsNullOrEmpty(providerHost)) return;
         var counts = _usage.GetOrAdd(qid.Value, _ => new ConcurrentDictionary<string, long>());
         counts.AddOrUpdate(providerHost, 1, (_, v) => v + 1);
+        // Keep the live-streams entry alive while NNTP fetches are flowing for
+        // this scope. No-op when the scope id isn't a registered stream session.
+        activeStreamRegistry?.Touch(qid.Value, 0);
     }
 
     public IReadOnlyDictionary<string, long> Snapshot(Guid queueItemId)

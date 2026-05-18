@@ -172,7 +172,7 @@ public class GetAndHeadHandlerPatch : IRequestHandler
                         path, clientKey, fileName, stream.CanSeek ? stream.Length : null);
                     using var scope = _providerUsageTracker.BeginScope(sessionId);
                     await CopyToAsync(stream, response.Body, range?.Start ?? 0, range?.End,
-                        sessionId, httpContext.RequestAborted).ConfigureAwait(false);
+                        httpContext.RequestAborted).ConfigureAwait(false);
                 }
             }
             else
@@ -184,7 +184,7 @@ public class GetAndHeadHandlerPatch : IRequestHandler
         return true;
     }
 
-    private async Task CopyToAsync(Stream src, Stream dest, long start, long? end, Guid sessionId, CancellationToken cancellationToken)
+    private async Task CopyToAsync(Stream src, Stream dest, long start, long? end, CancellationToken cancellationToken)
     {
         // Skip to the first offset
         if (start > 0)
@@ -215,9 +215,6 @@ public class GetAndHeadHandlerPatch : IRequestHandler
 
             // Write the data to the destination stream
             await dest.WriteAsync(buffer, 0, bytesRead, cancellationToken).ConfigureAwait(false);
-
-            // Update activity for the live-streams dashboard.
-            _activeStreamRegistry.Touch(sessionId, bytesRead);
 
             // Decrement the number of bytes left to read
             bytesToRead -= bytesRead;
