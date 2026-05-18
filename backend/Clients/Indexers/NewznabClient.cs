@@ -63,9 +63,10 @@ public class NewznabClient(string baseUrl, string apiKey, string userAgent = "Nz
     {
         var attrs = item.Elements(Newznab + "attr")
             .Where(x => x.Attribute("name")?.Value is not null)
+            .GroupBy(x => x.Attribute("name")!.Value, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(
-                x => x.Attribute("name")!.Value,
-                x => x.Attribute("value")?.Value ?? "",
+                g => g.Key,
+                g => g.Select(x => x.Attribute("value")?.Value).FirstOrDefault(v => !string.IsNullOrEmpty(v)) ?? "",
                 StringComparer.OrdinalIgnoreCase);
 
         var enclosure = item.Element("enclosure");
