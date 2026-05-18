@@ -9,7 +9,7 @@ namespace NzbWebDAV.Api.Controllers.Profiles;
 
 [ApiController]
 [Route("p/{token}/stream/{type}/{id}.json")]
-public class ProfileStreamController(
+public class ProfileReadController(
     ConfigManager configManager,
     NzbResolutionCache cache,
     NewznabRateLimiter rateLimiter,

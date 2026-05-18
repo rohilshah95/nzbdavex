@@ -17,7 +17,7 @@ public class GetWebdavItemController(
     DatabaseStore store,
     ConfigManager configManager,
     ProviderUsageTracker providerUsageTracker,
-    ActiveStreamRegistry activeStreamRegistry
+    ActiveReadRegistry activeReadRegistry
 ) : ControllerBase
 {
     private async Task<Stream> GetWebdavItem(GetWebdavItemRequest request)
@@ -37,12 +37,12 @@ public class GetWebdavItemController(
         var stream = await item.GetReadableStreamAsync(HttpContext.RequestAborted).ConfigureAwait(false);
         var fileSize = stream.Length;
 
-        // Now that the real filename + size are known, update the live-streams
+        // Now that the real filename + size are known, update the active-read
         // entry so the UI shows the human-readable name instead of the .ids GUID.
-        if (HttpContext.Items["streamSessionId"] is Guid sid)
+        if (HttpContext.Items["readSessionId"] is Guid sid)
         {
             var displayName = item is DatabaseStoreIdFile idFile ? idFile.FriendlyName : item.Name;
-            activeStreamRegistry.UpdateInfo(sid, displayName, fileSize);
+            activeReadRegistry.UpdateInfo(sid, displayName, fileSize);
         }
 
         // set the content-type and content-disposition headers
@@ -83,8 +83,8 @@ public class GetWebdavItemController(
         {
             HttpContext.Items["configManager"] = configManager;
             var request = new GetWebdavItemRequest(HttpContext);
-            var sessionId = TrackStreamSession(request.Item);
-            HttpContext.Items["streamSessionId"] = sessionId;
+            var sessionId = TrackReadSession(request.Item);
+            HttpContext.Items["readSessionId"] = sessionId;
             using var scope = providerUsageTracker.BeginScope(sessionId);
             await using var response = await GetWebdavItem(request);
             await response.CopyToAsync(Response.Body, bufferSize: 1024, HttpContext.RequestAborted);
@@ -95,13 +95,13 @@ public class GetWebdavItemController(
         }
     }
 
-    private Guid TrackStreamSession(string itemPath)
+    private Guid TrackReadSession(string itemPath)
     {
         // Provisional name from the URL path. GetWebdavItem replaces it with
         // item.Name (the real human-readable filename) once the store lookup runs.
         var fileName = Path.GetFileName(itemPath);
         var clientKey = $"{HttpContext.Connection.RemoteIpAddress}|{Request.Headers.UserAgent}";
-        return activeStreamRegistry.GetOrCreate(itemPath, clientKey, fileName, fileSize: null);
+        return activeReadRegistry.GetOrCreate(itemPath, clientKey, fileName, fileSize: null);
     }
 
     [HttpHead]

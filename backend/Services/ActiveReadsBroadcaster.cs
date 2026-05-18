@@ -7,13 +7,13 @@ using Serilog;
 namespace NzbWebDAV.Services;
 
 /// <summary>
-/// Ticks once per second to publish the current set of active WebDAV streams
-/// plus their per-backbone segment counts over the websocket. When no streams
-/// are active, the loop is mostly idle (just a sleep + a Count check). Sends
-/// nothing when nothing has changed since the last broadcast.
+/// Ticks once per second to publish the current set of active WebDAV read
+/// sessions plus their per-backbone segment counts over the websocket. When no
+/// sessions are active, the loop is mostly idle (just a sleep + a Count check).
+/// Sends nothing when nothing has changed since the last broadcast.
 /// </summary>
-public class ActiveStreamsBroadcaster(
-    ActiveStreamRegistry registry,
+public class ActiveReadsBroadcaster(
+    ActiveReadRegistry registry,
     ProviderUsageTracker usageTracker,
     WebsocketManager websocketManager
 ) : BackgroundService
@@ -38,7 +38,7 @@ public class ActiveStreamsBroadcaster(
             }
             catch (Exception e)
             {
-                Log.Debug(e, "ActiveStreamsBroadcaster tick failed");
+                Log.Debug(e, "ActiveReadsBroadcaster tick failed");
             }
         }
     }
@@ -58,7 +58,7 @@ public class ActiveStreamsBroadcaster(
         var usage = usageTracker.SnapshotMany(entries.Select(e => e.Id));
         var snapshot = new
         {
-            streams = entries.Select(e => new
+            reads = entries.Select(e => new
             {
                 id = e.Id,
                 fileName = e.FileName,
@@ -78,6 +78,6 @@ public class ActiveStreamsBroadcaster(
         if (payload == _lastPayload) return;
         _lastPayload = payload;
         _wasEmpty = entries.Count == 0;
-        await websocketManager.SendMessage(WebsocketTopic.ActiveStreams, payload).ConfigureAwait(false);
+        await websocketManager.SendMessage(WebsocketTopic.ActiveReads, payload).ConfigureAwait(false);
     }
 }

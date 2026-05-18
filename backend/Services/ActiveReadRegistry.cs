@@ -5,11 +5,11 @@ using System.Text;
 namespace NzbWebDAV.Services;
 
 /// <summary>
-/// In-memory list of currently active WebDAV stream sessions, used to surface
+/// In-memory list of currently active WebDAV read sessions, used to surface
 /// "what's being read right now and from which backbone" in the UI. No persistence:
-/// entries live only while a player is actively pulling bytes.
+/// entries live only while a client is actively pulling bytes.
 /// </summary>
-public class ActiveStreamRegistry
+public class ActiveReadRegistry
 {
     private static readonly TimeSpan ActivityWindow = TimeSpan.FromSeconds(15);
     private readonly ConcurrentDictionary<Guid, Entry> _entries = new();

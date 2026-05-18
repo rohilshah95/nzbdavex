@@ -744,7 +744,7 @@ public class ProfilePlayController(
     {
         var invalid = Path.GetInvalidFileNameChars();
         var clean = new string(name.Select(c => invalid.Contains(c) ? '_' : c).ToArray()).Trim();
-        return string.IsNullOrEmpty(clean) ? "stream" : clean;
+        return string.IsNullOrEmpty(clean) ? "untitled" : clean;
     }
 
     private IActionResult BuildRedirect(Guid davItemId, string extension)

@@ -11,7 +11,7 @@ declare const styles: {
   readonly "queue-icon": string;
   readonly "search-icon": string;
   readonly "settings-icon": string;
-  readonly "stream-icon": string;
+  readonly "read-icon": string;
   readonly "title": string;
   readonly "watchdog-icon": string;
   readonly "unstyled": string;

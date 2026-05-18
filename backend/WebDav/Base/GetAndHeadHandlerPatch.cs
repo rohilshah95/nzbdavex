@@ -22,16 +22,16 @@ public class GetAndHeadHandlerPatch : IRequestHandler
 {
     private readonly IStore _store;
     private readonly ProviderUsageTracker _providerUsageTracker;
-    private readonly ActiveStreamRegistry _activeStreamRegistry;
+    private readonly ActiveReadRegistry _activeReadRegistry;
 
     public GetAndHeadHandlerPatch(
         IStore store,
         ProviderUsageTracker providerUsageTracker,
-        ActiveStreamRegistry activeStreamRegistry)
+        ActiveReadRegistry activeReadRegistry)
     {
         _store = store;
         _providerUsageTracker = providerUsageTracker;
-        _activeStreamRegistry = activeStreamRegistry;
+        _activeReadRegistry = activeReadRegistry;
     }
     
     /// <summary>
@@ -168,7 +168,7 @@ public class GetAndHeadHandlerPatch : IRequestHandler
                         NzbWebDAV.WebDav.DatabaseStoreIdFile idFile => idFile.FriendlyName,
                         _ => !string.IsNullOrEmpty(entry.Name) ? entry.Name : System.IO.Path.GetFileName(path)
                     };
-                    var sessionId = _activeStreamRegistry.GetOrCreate(
+                    var sessionId = _activeReadRegistry.GetOrCreate(
                         path, clientKey, fileName, stream.CanSeek ? stream.Length : null);
                     using var scope = _providerUsageTracker.BeginScope(sessionId);
                     await CopyToAsync(stream, response.Body, range?.Start ?? 0, range?.End,
