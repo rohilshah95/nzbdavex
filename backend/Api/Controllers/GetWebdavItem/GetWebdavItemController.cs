@@ -87,11 +87,25 @@ public class GetWebdavItemController(
             HttpContext.Items["readSessionId"] = sessionId;
             using var scope = providerUsageTracker.BeginScope(sessionId);
             await using var response = await GetWebdavItem(request);
-            await response.CopyToAsync(Response.Body, bufferSize: 1024, HttpContext.RequestAborted);
+            await CopyAndReportAsync(response, Response.Body, sessionId, HttpContext.RequestAborted);
         }
         catch (UnauthorizedAccessException)
         {
             Response.StatusCode = 401;
+        }
+    }
+
+    private async Task CopyAndReportAsync(Stream src, Stream dest, Guid sessionId, CancellationToken ct)
+    {
+        // 64 KB chunks; report each written chunk back to the registry so the
+        // Right-Now panel's bytes-served / rate populate and the terminal
+        // ReadSession row records real BytesServed.
+        var buffer = new byte[64 * 1024];
+        int read;
+        while ((read = await src.ReadAsync(buffer, 0, buffer.Length, ct).ConfigureAwait(false)) > 0)
+        {
+            await dest.WriteAsync(buffer, 0, read, ct).ConfigureAwait(false);
+            activeReadRegistry.Touch(sessionId, read);
         }
     }
 
