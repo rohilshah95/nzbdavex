@@ -3,9 +3,11 @@ using NzbWebDAV.Clients.Usenet;
 using NzbWebDAV.Config;
 using NzbWebDAV.Database;
 using NzbWebDAV.Database.Models;
+using NzbWebDAV.Extensions;
 using NzbWebDAV.Models;
 using NzbWebDAV.Utils;
 using Serilog;
+using SharpCompress.Common.Rar.Headers;
 
 namespace NzbWebDAV.Services;
 
