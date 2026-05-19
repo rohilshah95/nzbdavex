@@ -68,7 +68,7 @@
 }
 
 .numCol {
-    text-align: right;
+    text-align: left;
     font-variant-numeric: tabular-nums;
 }
 
@@ -95,7 +95,6 @@
     position: relative;
     width: 80px;
     height: 16px;
-    margin-left: auto;
     background: var(--bg-surface);
     border-radius: 4px;
     overflow: hidden;
@@ -111,7 +110,7 @@
 .successText {
     position: relative;
     display: block;
-    text-align: right;
+    text-align: center;
     padding: 0 6px;
     line-height: 16px;
     font-size: 11px;
