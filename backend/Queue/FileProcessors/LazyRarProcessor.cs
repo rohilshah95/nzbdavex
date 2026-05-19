@@ -28,7 +28,7 @@ public class LazyRarProcessor(
     // resolver overwrites with exact ranges on first read.
     private const int ContinuationHeaderGuess = 80;
 
-    public override async Task<Result?> ProcessAsync()
+    public override async Task<BaseProcessor.Result?> ProcessAsync()
     {
         var sorted = SortByFilename(fileInfos);
         if (sorted is null || sorted.Count == 0) return null;
