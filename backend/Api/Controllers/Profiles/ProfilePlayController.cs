@@ -683,7 +683,8 @@ public class ProfilePlayController(
                 if (video is null) return (null, CommitReason.QueueFailed, newlyEnqueuedNzoId);
 
                 var ext = Path.GetExtension(video.Name).TrimStart('.').ToLowerInvariant();
-                return (BuildRedirect(video.Id, ext), CommitReason.Completed, newlyEnqueuedNzoId);
+                var redirect = await BuildRedirectAsync(video.Id, ext, ct).ConfigureAwait(false);
+                return (redirect, CommitReason.Completed, newlyEnqueuedNzoId);
             }
 
             // Refresh while actively polling so cleanup doesn't kill an item we're waiting on.
@@ -744,7 +745,7 @@ public class ProfilePlayController(
         var existingVideo = await FindLargestVideoAsync(existing.Id, ct).ConfigureAwait(false);
         if (existingVideo is null) return null;
         var ext = Path.GetExtension(existingVideo.Name).TrimStart('.').ToLowerInvariant();
-        return BuildRedirect(existingVideo.Id, ext);
+        return await BuildRedirectAsync(existingVideo.Id, ext, ct).ConfigureAwait(false);
     }
 
     private async Task<DavItem?> FindLargestVideoAsync(Guid historyItemId, CancellationToken ct)
@@ -767,24 +768,28 @@ public class ProfilePlayController(
         return string.IsNullOrEmpty(clean) ? "untitled" : clean;
     }
 
-    private IActionResult BuildRedirect(Guid davItemId, string extension)
+    private async Task<IActionResult> BuildRedirectAsync(Guid davItemId, string extension, CancellationToken ct)
     {
         var baseUrl = HttpContext.GetPublicBaseUrl(configManager.GetBaseUrl());
         var path = DatabaseStoreSymlinkFile.GetTargetPath(davItemId, "", '/').TrimStart('/');
         var dlKey = GetWebdavItemRequest.GenerateDownloadKey(configManager.GetStrmKey(), path);
 
-        _ = PreWarmLazyResolutionAsync(davItemId);
+        // Block on full lazy resolution before handing the player a URL. The
+        // resolved Meta is persisted by LazyRarResolver, so this one-time cost
+        // covers every future open and every seek — players never race the
+        // resolver after this returns.
+        await PreWarmLazyResolutionAsync(davItemId, ct).ConfigureAwait(false);
 
         return Redirect($"{baseUrl}/view/{path}?downloadKey={dlKey}&extension={extension}");
     }
 
-    private async Task PreWarmLazyResolutionAsync(Guid davItemId)
+    private async Task PreWarmLazyResolutionAsync(Guid davItemId, CancellationToken ct)
     {
         try
         {
             await using var ctx = new DavDatabaseContext();
             var davItem = await ctx.Items.AsNoTracking()
-                .FirstOrDefaultAsync(x => x.Id == davItemId)
+                .FirstOrDefaultAsync(x => x.Id == davItemId, ct)
                 .ConfigureAwait(false);
             if (davItem is null || davItem.SubType != DavItem.ItemSubType.MultipartFile) return;
 
@@ -795,8 +800,12 @@ public class ProfilePlayController(
             if ((mpf.Metadata.PendingParts?.Length ?? 0) == 0) return;
 
             await lazyRarResolver
-                .EnsureResolvedThroughAsync(mpf, long.MaxValue, CancellationToken.None)
+                .EnsureResolvedThroughAsync(mpf, long.MaxValue, ct)
                 .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception e)
         {

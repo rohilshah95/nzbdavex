@@ -3,7 +3,6 @@ using NzbWebDAV.Database.Models;
 using NzbWebDAV.Exceptions;
 using NzbWebDAV.Extensions;
 using NzbWebDAV.Services;
-using Serilog;
 
 namespace NzbWebDAV.Streams;
 
@@ -18,6 +17,11 @@ public class DavMultipartFileStream : Stream
     private long _position;
     private CombinedStream? _innerStream;
     private bool _disposed;
+    // Kicked off in the constructor; first read awaits it so the player can't
+    // win the race and seek into still-pending volumes. Shared by every read
+    // on this stream, and the resolver coalesces concurrent calls across
+    // streams via its in-flight cache plus persisted Meta.
+    private readonly Task? _preWarmTask;
 
     public DavMultipartFileStream(
         DavMultipartFile mpf,
@@ -35,21 +39,11 @@ public class DavMultipartFileStream : Stream
             && _mpf.Metadata.IsLazy
             && (_mpf.Metadata.PendingParts?.Length ?? 0) > 0)
         {
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await _resolver
-                        .EnsureResolvedThroughAsync(_mpf, long.MaxValue, CancellationToken.None)
-                        .ConfigureAwait(false);
-                }
-                catch (Exception e)
-                {
-                    Log.Debug(e,
-                        "Lazy RAR pre-warm failed for {Id}; on-demand resolver will retry on first read",
-                        _mpf.Id);
-                }
-            });
+            // CancellationToken.None on the shared work — one reader bailing
+            // mustn't kill resolution for everyone else waiting on it. The
+            // first read awaits this with its own CT via WaitAsync.
+            _preWarmTask = _resolver
+                .EnsureResolvedThroughAsync(_mpf, long.MaxValue, CancellationToken.None);
         }
     }
 
@@ -139,6 +133,13 @@ public class DavMultipartFileStream : Stream
 
     private async Task<CombinedStream> GetFileStreamAsync(long rangeStart, CancellationToken ct)
     {
+        // Wait for the constructor's pre-warm to finish before opening the
+        // inner stream. After this returns, every FilePart is resolved and
+        // persisted, so seeks land in O(1) instead of forcing per-volume
+        // resolution behind the player's Range requests.
+        if (_preWarmTask is not null && !_preWarmTask.IsCompleted)
+            await _preWarmTask.WaitAsync(ct).ConfigureAwait(false);
+
         var meta = await EnsureCoveringAsync(rangeStart, ct).ConfigureAwait(false);
 
         if (rangeStart == 0)
