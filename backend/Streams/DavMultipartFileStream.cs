@@ -3,6 +3,7 @@ using NzbWebDAV.Database.Models;
 using NzbWebDAV.Exceptions;
 using NzbWebDAV.Extensions;
 using NzbWebDAV.Services;
+using Serilog;
 
 namespace NzbWebDAV.Streams;
 
@@ -29,6 +30,27 @@ public class DavMultipartFileStream : Stream
         _articleBufferSize = articleBufferSize;
         _resolver = resolver;
         _length = ComputeLength(mpf.Metadata);
+
+        if (_resolver != null
+            && _mpf.Metadata.IsLazy
+            && (_mpf.Metadata.PendingParts?.Length ?? 0) > 0)
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await _resolver
+                        .EnsureResolvedThroughAsync(_mpf, long.MaxValue, CancellationToken.None)
+                        .ConfigureAwait(false);
+                }
+                catch (Exception e)
+                {
+                    Log.Debug(e,
+                        "Lazy RAR pre-warm failed for {Id}; on-demand resolver will retry on first read",
+                        _mpf.Id);
+                }
+            });
+        }
     }
 
     public override void Flush()
