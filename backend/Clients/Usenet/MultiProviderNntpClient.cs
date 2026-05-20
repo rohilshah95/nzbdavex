@@ -174,8 +174,7 @@ public class MultiProviderNntpClient(
             if (lastException is not null)
             {
                 var msg = lastException.SourceException.Message;
-                Log.Information("NNTP fallback: previous provider failed with `{Msg}`. Trying {Host}.",
-                    msg, provider.Host);
+                Log.Debug($"Encountered error during NNTP Operation: `{msg}`. Trying another provider.");
             }
 
             var stopwatch = Stopwatch.StartNew();

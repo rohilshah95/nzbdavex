@@ -59,7 +59,7 @@ public class MultiConnectionNntpClient(
         return RunWithConnection(
             "STAT",
             SemaphorePriority.Low,
-            (connection, _, effectiveCt) => connection.StatAsync(segmentId, effectiveCt),
+            (connection, _) => connection.StatAsync(segmentId, ct),
             onConnectionReadyAgain: null,
             ct
         );
@@ -70,7 +70,7 @@ public class MultiConnectionNntpClient(
         return RunWithConnection(
             "HEAD",
             SemaphorePriority.Low,
-            (connection, _, effectiveCt) => connection.HeadAsync(segmentId, effectiveCt),
+            (connection, _) => connection.HeadAsync(segmentId, ct),
             onConnectionReadyAgain: null,
             ct
         );
@@ -81,7 +81,7 @@ public class MultiConnectionNntpClient(
         return RunWithConnection(
             "BODY",
             SemaphorePriority.High,
-            (connection, onDone, effectiveCt) => connection.DecodedBodyAsync(segmentId, onDone, effectiveCt),
+            (connection, onDone) => connection.DecodedBodyAsync(segmentId, onDone, ct),
             onConnectionReadyAgain: null,
             ct
         );
@@ -96,7 +96,7 @@ public class MultiConnectionNntpClient(
         return RunWithConnection(
             "ARTICLE",
             SemaphorePriority.High,
-            (connection, onDone, effectiveCt) => connection.DecodedArticleAsync(segmentId, onDone, effectiveCt),
+            (connection, onDone) => connection.DecodedArticleAsync(segmentId, onDone, ct),
             onConnectionReadyAgain: null,
             ct
         );
@@ -107,7 +107,7 @@ public class MultiConnectionNntpClient(
         return RunWithConnection(
             "DATE",
             SemaphorePriority.Low,
-            (connection, _, effectiveCt) => connection.DateAsync(effectiveCt),
+            (connection, _) => connection.DateAsync(ct),
             onConnectionReadyAgain: null,
             ct
         );
@@ -123,7 +123,7 @@ public class MultiConnectionNntpClient(
         return RunWithConnection(
             "BODY",
             SemaphorePriority.High,
-            (connection, onDone, effectiveCt) => connection.DecodedBodyAsync(segmentId, onDone, effectiveCt),
+            (connection, onDone) => connection.DecodedBodyAsync(segmentId, onDone, ct),
             onConnectionReadyAgain,
             ct
         );
@@ -139,25 +139,17 @@ public class MultiConnectionNntpClient(
         return RunWithConnection(
             "ARTICLE",
             SemaphorePriority.High,
-            (connection, onDone, effectiveCt) => connection.DecodedArticleAsync(segmentId, onDone, effectiveCt),
+            (connection, onDone) => connection.DecodedArticleAsync(segmentId, onDone, ct),
             onConnectionReadyAgain,
             ct
         );
     }
 
-    // Cap on how long we'll wait for a BODY/ARTICLE provider to send its
-    // initial response line. Healthy providers reply in well under a second;
-    // anything past a few seconds is almost certainly a mid-command stall.
-    // Body bytes that follow the initial response stream under the caller's
-    // original cancellation token — this deadline only governs first-response
-    // latency.
-    private static readonly TimeSpan FirstResponseDeadline = TimeSpan.FromSeconds(5);
-
     private async Task<T> RunWithConnection<T>
     (
         string name,
         SemaphorePriority priority,
-        Func<INntpClient, Action<ArticleBodyResult>, CancellationToken, Task<T>> command,
+        Func<INntpClient, Action<ArticleBodyResult>, Task<T>> command,
         Action<ArticleBodyResult>? onConnectionReadyAgain,
         CancellationToken ct,
         int retryCount = 1
@@ -166,7 +158,6 @@ public class MultiConnectionNntpClient(
         while (retryCount >= 0)
         {
             ConnectionLock<INntpClient>? connectionLock = null;
-            CancellationTokenSource? startDeadlineCts = null;
             try
             {
                 connectionLock = await connectionPool.GetConnectionLockAsync(priority, ct).ConfigureAwait(false);
@@ -194,40 +185,10 @@ public class MultiConnectionNntpClient(
                 throw;
             }
 
-            // Wrap BODY/ARTICLE in a tight first-response deadline. The linked
-            // CTS preserves outer cancellation; only the deadline component is
-            // disarmed once `command` returns (see CancelAfter(Infinite) below).
-            var effectiveCt = ct;
-            if (name is "BODY" or "ARTICLE")
-            {
-                startDeadlineCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                startDeadlineCts.CancelAfter(FirstResponseDeadline);
-                effectiveCt = startDeadlineCts.Token;
-            }
-
             T? result;
             try
             {
-                result = await command(connectionLock.Connection, OnConnectionReadyAgain, effectiveCt).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (startDeadlineCts is not null
-                                                      && startDeadlineCts.IsCancellationRequested
-                                                      && !ct.IsCancellationRequested)
-            {
-                // Start-deadline elapsed before the provider produced an initial
-                // response. Trip the breaker hard so subsequent requests skip
-                // this provider — repeating the same N×deadline tax on every
-                // user click is exactly what we're trying to avoid.
-                Log.Warning(
-                    "Start-deadline ({Deadline}s) expired on {Name} via {Host} — tripping provider and rotating",
-                    FirstResponseDeadline.TotalSeconds, name, host);
-                circuitBreaker.RecordHardFailure("BODY/ARTICLE start-deadline");
-                LogException(() => connectionLock?.Replace());
-                LogException(() => connectionLock?.Dispose());
-                LogException(() => startDeadlineCts?.Dispose());
-                LogException(() => onConnectionReadyAgain?.Invoke(ArticleBodyResult.NotRetrieved));
-                throw new TimeoutException(
-                    $"No initial response from {name} via {host} within {FirstResponseDeadline.TotalSeconds:0}s.");
+                result = await command(connectionLock.Connection, OnConnectionReadyAgain).ConfigureAwait(false);
             }
             catch (Exception e) when (e.IsCancellationException())
             {
@@ -236,7 +197,6 @@ public class MultiConnectionNntpClient(
                 if (name is "BODY" or "ARTICLE")
                     LogException(() => connectionLock?.Replace());
                 LogException(() => connectionLock?.Dispose());
-                LogException(() => startDeadlineCts?.Dispose());
                 LogException(() => onConnectionReadyAgain?.Invoke(ArticleBodyResult.NotRetrieved));
                 throw;
             }
@@ -248,7 +208,6 @@ public class MultiConnectionNntpClient(
                 {
                     LogException(() => connectionLock?.Replace());
                     LogException(() => connectionLock?.Dispose());
-                    LogException(() => startDeadlineCts?.Dispose());
                     if (retryCount > 0)
                     {
                         Log.Debug(e, $"Got 'article not found' on nntp {name}. Retrying once with a fresh connection.");
@@ -259,7 +218,6 @@ public class MultiConnectionNntpClient(
                     throw;
                 }
                 LogException(() => connectionLock?.Dispose());
-                LogException(() => startDeadlineCts?.Dispose());
                 LogException(() => onConnectionReadyAgain?.Invoke(ArticleBodyResult.NotRetrieved));
                 throw;
             }
@@ -269,15 +227,11 @@ public class MultiConnectionNntpClient(
                 // mid-command. A fresh socket to the same provider is unlikely to fare
                 // any better, and burning another timeout retrying here just doubles
                 // the wait before MultiProviderNntpClient can fall over to the next
-                // provider. Trip the breaker immediately (one stall is enough — we
-                // don't want the next user click to pay the same tax), replace the
-                // socket (read may have left partial bytes on the wire), and
-                // propagate so the outer provider loop moves on.
-                Log.Warning(e, "Read timeout on {Name} via {Host} — tripping provider and rotating", name, host);
-                circuitBreaker.RecordHardFailure("BODY/ARTICLE read timeout");
+                // provider. Replace the socket (the read may have left partial bytes
+                // on the wire) and propagate so the outer provider loop moves on.
+                circuitBreaker.RecordFailure();
                 LogException(() => connectionLock?.Replace());
                 LogException(() => connectionLock?.Dispose());
-                LogException(() => startDeadlineCts?.Dispose());
                 LogException(() => onConnectionReadyAgain?.Invoke(ArticleBodyResult.NotRetrieved));
                 throw;
             }
@@ -286,7 +240,6 @@ public class MultiConnectionNntpClient(
                 circuitBreaker.RecordFailure();
                 LogException(() => connectionLock?.Replace());
                 LogException(() => connectionLock?.Dispose());
-                LogException(() => startDeadlineCts?.Dispose());
                 if (retryCount > 0)
                 {
                     Log.Debug(e, $"Error executing nntp {name} command. Retrying with a new connection.");
@@ -299,24 +252,18 @@ public class MultiConnectionNntpClient(
                 throw;
             }
 
-            // Initial response arrived — disarm the start-deadline so subsequent
-            // body bytes stream under the caller's original cancellation token.
-            startDeadlineCts?.CancelAfter(Timeout.InfiniteTimeSpan);
-
             circuitBreaker.RecordSuccess();
 
             // stat, head, and date
             if (name is "STAT" or "HEAD" or "DATE")
             {
                 LogException(() => connectionLock?.Dispose());
-                LogException(() => startDeadlineCts?.Dispose());
             }
-
+            
             // body and article
             else if ((result?.Success ?? false) == false)
             {
                 LogException(() => connectionLock?.Dispose());
-                LogException(() => startDeadlineCts?.Dispose());
                 LogException(() => onConnectionReadyAgain?.Invoke(ArticleBodyResult.NotRetrieved));
             }
 
@@ -327,7 +274,6 @@ public class MultiConnectionNntpClient(
                 if (articleBodyResult != ArticleBodyResult.Retrieved) return;
 
                 LogException(() => connectionLock?.Dispose());
-                LogException(() => startDeadlineCts?.Dispose());
                 LogException(() => onConnectionReadyAgain?.Invoke(articleBodyResult));
             }
         }
