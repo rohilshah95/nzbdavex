@@ -1,7 +1,9 @@
 ﻿using NzbWebDAV.Clients.Usenet;
+using NzbWebDAV.Exceptions;
 using NzbWebDAV.Extensions;
 using NzbWebDAV.Models;
 using NzbWebDAV.Utils;
+using Serilog;
 using UsenetSharp.Streams;
 
 namespace NzbWebDAV.Streams;
@@ -16,6 +18,15 @@ public class NzbFileStream(
     private long _position;
     private bool _disposed;
     private Stream? _innerStream;
+
+    // Average yEnc-decoded size per segment in this file. Used to (a) zero-fill
+    // missing segments mid-stream so the demuxer can resync instead of the
+    // player closing on a truncated body, and (b) synthesize a probe range
+    // when SeekSegment can't fetch a missing segment's yEnc header. yEnc
+    // segments within a single NzbFile are produced uniformly except for the
+    // tail, so the average is within a few percent of any real segment.
+    private long ExpectedSegmentSize =>
+        fileSegmentIds.Length > 0 ? Math.Max(1, fileSize / fileSegmentIds.Length) : 0;
 
     public override bool CanSeek => true;
     public override long Length => fileSize;
@@ -54,14 +65,32 @@ public class NzbFileStream(
 
     private async Task<InterpolationSearch.Result> SeekSegment(long byteOffset, CancellationToken ct)
     {
+        var avg = ExpectedSegmentSize;
         return await InterpolationSearch.Find(
             byteOffset,
             new LongRange(0, fileSegmentIds.Length),
             new LongRange(0, fileSize),
             async (guess) =>
             {
-                var header = await usenetClient.GetYencHeadersAsync(fileSegmentIds[guess], ct).ConfigureAwait(false);
-                return new LongRange(header.PartOffset, header.PartOffset + header.PartSize);
+                try
+                {
+                    var header = await usenetClient.GetYencHeadersAsync(fileSegmentIds[guess], ct).ConfigureAwait(false);
+                    return new LongRange(header.PartOffset, header.PartOffset + header.PartSize);
+                }
+                catch (UsenetArticleNotFoundException e)
+                {
+                    // The probe segment itself is missing — fall back to a
+                    // synthetic uniform-size range so interpolation can still
+                    // converge. The actual body read of this segment (if it
+                    // turns out to be the seek target) gets zero-filled by
+                    // MultiSegmentStream.
+                    Log.Warning(
+                        "Seek probe hit missing article {SegmentId} (segment index {Index}). Using estimated range.",
+                        e.SegmentId, guess);
+                    var start = guess * avg;
+                    var end = Math.Min(fileSize, start + avg);
+                    return new LongRange(start, end);
+                }
             },
             ct
         ).ConfigureAwait(false);
@@ -80,7 +109,7 @@ public class NzbFileStream(
     private Stream GetMultiSegmentStream(int firstSegmentIndex, CancellationToken cancellationToken)
     {
         var segmentIds = fileSegmentIds.AsMemory()[firstSegmentIndex..];
-        return MultiSegmentStream.Create(segmentIds, usenetClient, articleBufferSize, cancellationToken);
+        return MultiSegmentStream.Create(segmentIds, usenetClient, articleBufferSize, ExpectedSegmentSize, cancellationToken);
     }
 
     protected override void Dispose(bool disposing)

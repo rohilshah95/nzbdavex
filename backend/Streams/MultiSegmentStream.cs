@@ -3,6 +3,8 @@ using NzbWebDAV.Clients.Usenet;
 using NzbWebDAV.Clients.Usenet.Concurrency;
 using NzbWebDAV.Clients.Usenet.Contexts;
 using NzbWebDAV.Clients.Usenet.Models;
+using NzbWebDAV.Exceptions;
+using Serilog;
 using UsenetSharp.Streams;
 
 namespace NzbWebDAV.Streams;
@@ -11,6 +13,7 @@ public class MultiSegmentStream : FastReadOnlyNonSeekableStream
 {
     private readonly Memory<string> _segmentIds;
     private readonly INntpClient _usenetClient;
+    private readonly long _expectedSegmentSize;
     private readonly Channel<Task<Stream>> _streamTasks;
     private readonly ContextualCancellationTokenSource _cts;
     private Stream? _stream;
@@ -21,12 +24,13 @@ public class MultiSegmentStream : FastReadOnlyNonSeekableStream
         Memory<string> segmentIds,
         INntpClient usenetClient,
         int articleBufferSize,
+        long expectedSegmentSize,
         CancellationToken cancellationToken
     )
     {
         return articleBufferSize == 0
-            ? new UnbufferedMultiSegmentStream(segmentIds, usenetClient)
-            : new MultiSegmentStream(segmentIds, usenetClient, articleBufferSize, cancellationToken);
+            ? new UnbufferedMultiSegmentStream(segmentIds, usenetClient, expectedSegmentSize)
+            : new MultiSegmentStream(segmentIds, usenetClient, articleBufferSize, expectedSegmentSize, cancellationToken);
     }
 
     private MultiSegmentStream
@@ -34,11 +38,13 @@ public class MultiSegmentStream : FastReadOnlyNonSeekableStream
         Memory<string> segmentIds,
         INntpClient usenetClient,
         int articleBufferSize,
+        long expectedSegmentSize,
         CancellationToken cancellationToken
     )
     {
         _segmentIds = segmentIds;
         _usenetClient = usenetClient;
+        _expectedSegmentSize = expectedSegmentSize;
         _streamTasks = Channel.CreateBounded<Task<Stream>>(articleBufferSize);
         _cts = ContextualCancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _ = DownloadSegments(_cts.Token);
@@ -78,10 +84,26 @@ public class MultiSegmentStream : FastReadOnlyNonSeekableStream
         CancellationToken cancellationToken
     )
     {
-        var bodyResponse = await _usenetClient
-            .DecodedBodyAsync(segmentId, exclusiveConnection, cancellationToken)
-            .ConfigureAwait(false);
-        return bodyResponse.Stream;
+        try
+        {
+            var bodyResponse = await _usenetClient
+                .DecodedBodyAsync(segmentId, exclusiveConnection, cancellationToken)
+                .ConfigureAwait(false);
+            return bodyResponse.Stream;
+        }
+        catch (UsenetArticleNotFoundException e)
+        {
+            // All providers report this segment missing. Substitute zeros so the
+            // HTTP response stays byte-aligned with Content-Length and the player
+            // can resync to the next keyframe instead of seeing a truncated body
+            // (which closes VLC/MPV/Plex). The outer LimitLengthStream clips any
+            // overshoot, so erring on "estimated full segment" is safe.
+            var fill = _expectedSegmentSize > 0 ? _expectedSegmentSize : 1;
+            Log.Warning(
+                "Article {SegmentId} missing on all providers. Zero-filling {Bytes} bytes to keep playback alive.",
+                e.SegmentId, fill);
+            return new MemoryStream(new byte[fill], writable: false);
+        }
     }
 
     public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
