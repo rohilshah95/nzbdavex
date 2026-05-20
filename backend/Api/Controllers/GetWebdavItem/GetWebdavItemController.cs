@@ -53,18 +53,33 @@ public class GetWebdavItemController(
         Response.Headers["Content-Encoding"] = "identity";
         Response.Headers["Accept-Ranges"] = "bytes";
 
-        if (request.RangeStart is not null)
+        // Resolve the suffix form ("bytes=-N", last N bytes) now that fileSize
+        // is known. Clamp at zero so an oversized suffix means "the whole file"
+        // rather than seeking before byte 0.
+        long? rangeStart = request.RangeStart;
+        long? rangeEnd = request.RangeEnd;
+        if (request.SuffixLength is { } suffixLen)
+        {
+            rangeStart = Math.Max(0, fileSize - suffixLen);
+            rangeEnd = fileSize - 1;
+        }
+
+        // Stash the effective start so HandleRequest can report playback
+        // position from the real offset (not from 0) for suffix-range reads.
+        HttpContext.Items["effectiveRangeStart"] = rangeStart ?? 0L;
+
+        if (rangeStart is not null)
         {
             // compute
-            var end = request.RangeEnd ?? (fileSize - 1);
-            var chunkSize = 1 + end - request.RangeStart!.Value;
+            var end = rangeEnd ?? (fileSize - 1);
+            var chunkSize = 1 + end - rangeStart.Value;
 
             // seek
-            stream.Seek(request.RangeStart.Value, SeekOrigin.Begin);
-            if (request.RangeEnd is not null) stream = stream.LimitLength(chunkSize);
+            stream.Seek(rangeStart.Value, SeekOrigin.Begin);
+            if (rangeEnd is not null) stream = stream.LimitLength(chunkSize);
 
             // set response headers
-            Response.Headers["Content-Range"] = $"bytes {request.RangeStart}-{end}/{fileSize}";
+            Response.Headers["Content-Range"] = $"bytes {rangeStart}-{end}/{fileSize}";
             Response.Headers["Content-Length"] = chunkSize.ToString();
             Response.StatusCode = 206;
         }
@@ -87,7 +102,8 @@ public class GetWebdavItemController(
             HttpContext.Items["readSessionId"] = sessionId;
             using var scope = providerUsageTracker.BeginScope(sessionId);
             await using var response = await GetWebdavItem(request);
-            await CopyAndReportAsync(response, Response.Body, sessionId, request.RangeStart ?? 0, HttpContext.RequestAborted);
+            var effectiveStart = (long)(HttpContext.Items["effectiveRangeStart"] ?? 0L);
+            await CopyAndReportAsync(response, Response.Body, sessionId, effectiveStart, HttpContext.RequestAborted);
         }
         catch (UnauthorizedAccessException)
         {
@@ -140,8 +156,11 @@ public class GetWebdavItemController(
     {
         if (item == "README") return "text/plain";
         var extension = Path.GetExtension(item).ToLower();
-        return extension == ".mkv" ? "video/webm"
-            : extension == ".rclonelink" ? "text/plain"
+        // .mkv falls through to ContentTypeUtil → "video/x-matroska". The old
+        // override returned "video/webm", but WebM only permits VP8/VP9 + Vorbis/Opus.
+        // Releases using H.264/H.265 + AC3/DTS made strict players reject the
+        // video stream while still decoding audio.
+        return extension == ".rclonelink" ? "text/plain"
             : extension == ".nfo" ? "text/plain"
             : ContentTypeUtil.GetContentType(Path.GetFileName(item));
     }
