@@ -57,20 +57,18 @@ public class PreflightOrchestrator(
         IReadOnlyList<NzbResolutionCache.Candidate> candidates,
         CancellationToken ct)
     {
-        var count = Math.Min(configManager.GetPreflightCandidateCount(), candidates.Count);
+        var maxAttempts = Math.Min(configManager.GetPreflightMaxAttempts(), candidates.Count);
         var maxWait = TimeSpan.FromSeconds(configManager.GetPreflightIndexerMaxWaitSeconds());
         var indexers = configManager.GetIndexerConfig().Indexers
             .ToDictionary(x => x.Name, x => x);
 
-        var tasks = new List<Task<bool>>(count);
-        for (var i = 0; i < count; i++)
+        for (var i = 0; i < maxAttempts; i++)
         {
-            var c = candidates[i];
-            tasks.Add(PreflightCandidateAsync(mode, c, indexers, maxWait, ct));
+            if (ct.IsCancellationRequested) return 0;
+            var ok = await PreflightCandidateAsync(mode, candidates[i], indexers, maxWait, ct).ConfigureAwait(false);
+            if (ok) return i + 1;
         }
-
-        var results = await Task.WhenAll(tasks).ConfigureAwait(false);
-        return results.Count(x => x);
+        return 0;
     }
 
     private async Task<bool> PreflightCandidateAsync(

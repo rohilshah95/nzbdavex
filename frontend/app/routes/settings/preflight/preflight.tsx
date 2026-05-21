@@ -46,19 +46,20 @@ export function PreflightSettings({ config, setNewConfig }: PreflightSettingsPro
             </Form.Group>
 
             <Form.Group className={styles.section}>
-                <Form.Label>Top results to preflight</Form.Label>
+                <Form.Label>Max candidates to try</Form.Label>
                 <Form.Control
                     className={styles.input}
                     type="number"
                     min={1}
-                    max={10}
+                    max={50}
                     disabled={!enabled}
-                    value={config["preflight.candidate-count"] ?? "3"}
-                    onChange={e => set("preflight.candidate-count", e.target.value)} />
+                    value={config["preflight.max-attempts"] ?? "3"}
+                    onChange={e => set("preflight.max-attempts", e.target.value)} />
                 <p className={styles.hint}>
-                    How many of the top-ranked results from each article list get preflighted.
-                    Higher values cover more fallback positions if the first one fails, but use
-                    more indexer quota. Default 3.
+                    Walks the top-ranked results one at a time and stops on the first one that
+                    passes the check. So a missing top result automatically falls through to
+                    the next one — same idea as the watchdog at click time, but in the
+                    background. Default 3.
                 </p>
             </Form.Group>
 
@@ -102,7 +103,7 @@ export function PreflightSettings({ config, setNewConfig }: PreflightSettingsPro
 
 export function isPreflightSettingsUpdated(config: Record<string, string>, newConfig: Record<string, string>) {
     return config["preflight.mode"] !== newConfig["preflight.mode"]
-        || config["preflight.candidate-count"] !== newConfig["preflight.candidate-count"]
+        || config["preflight.max-attempts"] !== newConfig["preflight.max-attempts"]
         || config["preflight.ttl-seconds"] !== newConfig["preflight.ttl-seconds"]
         || config["preflight.indexer-max-wait-seconds"] !== newConfig["preflight.indexer-max-wait-seconds"];
 }

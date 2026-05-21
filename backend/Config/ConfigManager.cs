@@ -276,11 +276,11 @@ public class ConfigManager
         };
     }
 
-    public int GetPreflightCandidateCount()
+    public int GetPreflightMaxAttempts()
     {
-        var v = StringUtil.EmptyToNull(GetConfigValue("preflight.candidate-count"));
+        var v = StringUtil.EmptyToNull(GetConfigValue("preflight.max-attempts"));
         if (v == null) return 3;
-        return int.TryParse(v, out var n) ? Math.Clamp(n, 1, 10) : 3;
+        return int.TryParse(v, out var n) ? Math.Clamp(n, 1, 50) : 3;
     }
 
     public int GetPreflightTtlSeconds()
