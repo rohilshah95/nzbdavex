@@ -11,8 +11,14 @@ public class IndexerConfig
     public class ConnectionDetails
     {
         public required string Name { get; set; }
+        // Indexer type: "newznab" (default) or "easynews"
+        public string IndexerType { get; set; } = "newznab";
+        // For newznab: the API URL. For easynews: can be left empty or use base URL.
         public required string Url { get; set; }
+        // For newznab: API key. For easynews: password.
         public required string ApiKey { get; set; }
+        // Easynews-specific: username (only used when IndexerType is "easynews")
+        public string? Username { get; set; }
         public bool Enabled { get; set; } = true;
         public string? UserAgent { get; set; }
         public int MaxRequestsPerMinute { get; set; } = 0;

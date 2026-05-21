@@ -32,8 +32,10 @@ const OPTIMISED_DEFAULTS: ResultFilter = {
 
 interface ConnectionDetails {
     Name: string;
+    IndexerType?: string;
     Url: string;
     ApiKey: string;
+    Username?: string;
     Enabled: boolean;
     UserAgent?: string;
     MaxRequestsPerMinute?: number;
@@ -356,8 +358,10 @@ type IndexerModalProps = {
 
 function IndexerModal({ show, indexer, onClose, onSave }: IndexerModalProps) {
     const [name, setName] = useState("");
+    const [indexerType, setIndexerType] = useState("newznab");
     const [url, setUrl] = useState("");
     const [apiKey, setApiKey] = useState("");
+    const [username, setUsername] = useState("");
     const [userAgent, setUserAgent] = useState("");
     const [proxyUrl, setProxyUrl] = useState("");
     const [maxRpm, setMaxRpm] = useState("0");
@@ -392,6 +396,8 @@ function IndexerModal({ show, indexer, onClose, onSave }: IndexerModalProps) {
             setMaxRpm((indexer?.MaxRequestsPerMinute ?? 0).toString());
             setEnabled(indexer?.Enabled ?? true);
             setStrict(indexer?.EnableStrictMatching ?? false);
+            setIndexerType(indexer?.IndexerType || "newznab");
+            setUsername(indexer?.Username || "");
             const f = indexer?.Filter ?? OPTIMISED_DEFAULTS;
             setFilterEnabled(f.Enabled);
             setFilterSkipPassworded(f.SkipPassworded);
@@ -417,12 +423,23 @@ function IndexerModal({ show, indexer, onClose, onSave }: IndexerModalProps) {
     }, [show, onClose]);
 
     const handleTest = useCallback(async () => {
-        if (!url.trim() || !apiKey.trim()) return;
+        const isEasynews = indexerType === "easynews";
+        if (isEasynews) {
+            if (!username.trim() || !apiKey.trim()) return;
+        } else {
+            if (!url.trim() || !apiKey.trim()) return;
+        }
         setTestState('testing');
         try {
             const fd = new FormData();
-            fd.append('url', url);
-            fd.append('apiKey', apiKey);
+            fd.append('indexerType', indexerType);
+            if (isEasynews) {
+                fd.append('username', username);
+                fd.append('apiKey', apiKey);
+            } else {
+                fd.append('url', url);
+                fd.append('apiKey', apiKey);
+            }
             if (userAgent.trim()) fd.append('userAgent', userAgent);
             if (proxyUrl.trim()) fd.append('proxyUrl', proxyUrl);
             const r = await fetch('/api/test-indexer-connection', { method: 'POST', body: fd });
@@ -431,7 +448,7 @@ function IndexerModal({ show, indexer, onClose, onSave }: IndexerModalProps) {
         } catch {
             setTestState('error');
         }
-    }, [url, apiKey, userAgent, proxyUrl]);
+    }, [url, apiKey, userAgent, proxyUrl, indexerType, username]);
 
     const handleSave = useCallback(() => {
         const rpm = parseInt(maxRpm || "0", 10);
@@ -445,12 +462,17 @@ function IndexerModal({ show, indexer, onClose, onSave }: IndexerModalProps) {
             && clampNonNegInt(filterGrabsGraceHours, OPTIMISED_DEFAULTS.GrabsGraceHours) === OPTIMISED_DEFAULTS.GrabsGraceHours
             && clampNonNegInt(filterMaxAgeDaysWithoutGrabs, OPTIMISED_DEFAULTS.MaxAgeDaysWithoutGrabs) === OPTIMISED_DEFAULTS.MaxAgeDaysWithoutGrabs
             && filterPreferDownloaded === OPTIMISED_DEFAULTS.PreferDownloaded;
+        
+        const isEasynews = indexerType === "easynews";
+        
         onSave({
             Name: name.trim(),
-            Url: url.trim(),
+            IndexerType: indexerType,
+            Url: isEasynews ? "" : url.trim(),
             ApiKey: apiKey.trim(),
+            Username: isEasynews ? username.trim() : undefined,
             Enabled: enabled,
-            UserAgent: userAgent.trim() || undefined,
+            UserAgent: isEasynews ? undefined : (userAgent.trim() || undefined),
             ProxyUrl: proxyUrl.trim() || undefined,
             MaxRequestsPerMinute: Number.isFinite(rpm) && rpm > 0 ? rpm : 0,
             EnableStrictMatching: strict,
@@ -465,13 +487,14 @@ function IndexerModal({ show, indexer, onClose, onSave }: IndexerModalProps) {
         });
     }, [name, url, apiKey, userAgent, proxyUrl, maxRpm, enabled, strict,
         filterEnabled, filterSkipPassworded, filterMinGrabs, filterGrabsGraceHours,
-        filterMaxAgeDaysWithoutGrabs, filterPreferDownloaded, onSave]);
+        filterMaxAgeDaysWithoutGrabs, filterPreferDownloaded, onSave, indexerType, username]);
 
     const handleOverlayClick = useCallback((e: React.MouseEvent) => {
         if (e.target === e.currentTarget) onClose();
     }, [onClose]);
 
     const isUrlValid = (() => {
+        if (indexerType === "easynews") return true; // No URL needed for easynews
         if (!url.trim()) return false;
         try { new URL(url); return true; } catch { return false; }
     })();
@@ -508,6 +531,21 @@ function IndexerModal({ show, indexer, onClose, onSave }: IndexerModalProps) {
                             />
                         </div>
 
+                        <div className={styles["form-group"]}>
+                            <label htmlFor="indexer-type" className={styles["form-label"]}>Indexer Type</label>
+                            <select
+                                id="indexer-type"
+                                className={styles["form-input"]}
+                                value={indexerType}
+                                onChange={e => setIndexerType(e.target.value)}
+                            >
+                                <option value="newznab">Newznab (API)</option>
+                                <option value="easynews">Easynews</option>
+                            </select>
+                        </div>
+
+                        {indexerType === "newznab" && (
+                        <>
                         <div className={`${styles["form-group"]} ${styles["full-width"]}`}>
                             <label htmlFor="indexer-url" className={styles["form-label"]}>URL</label>
                             <input
@@ -544,6 +582,36 @@ function IndexerModal({ show, indexer, onClose, onSave }: IndexerModalProps) {
                                 onChange={e => setUserAgent(e.target.value)}
                             />
                         </div>
+                        </>
+                        )}
+
+                        {indexerType === "easynews" && (
+                        <>
+                        <div className={`${styles["form-group"]} ${styles["full-width"]}`}>
+                            <label htmlFor="indexer-username" className={styles["form-label"]}>Username</label>
+                            <input
+                                type="text"
+                                id="indexer-username"
+                                className={styles["form-input"]}
+                                placeholder="Your Easynews username"
+                                value={username}
+                                onChange={e => setUsername(e.target.value)}
+                            />
+                        </div>
+
+                        <div className={`${styles["form-group"]} ${styles["full-width"]}`}>
+                            <label htmlFor="indexer-password" className={styles["form-label"]}>Password</label>
+                            <input
+                                type="password"
+                                id="indexer-password"
+                                className={styles["form-input"]}
+                                placeholder="Your Easynews password"
+                                value={apiKey}
+                                onChange={e => setApiKey(e.target.value)}
+                            />
+                        </div>
+                        </>
+                        )}
 
                         <div className={`${styles["form-group"]} ${styles["full-width"]}`}>
                             <label htmlFor="indexer-proxy" className={styles["form-label"]}>
@@ -787,7 +855,12 @@ export function isIndexersSettingsValid(newConfig: Record<string, string>) {
         for (const i of c.Indexers) {
             if (!i.Name.trim()) return false;
             if (!i.ApiKey.trim()) return false;
-            try { new URL(i.Url); } catch { return false; }
+            const isEasynews = i.IndexerType?.toLowerCase() === "easynews";
+            if (!isEasynews) {
+                try { new URL(i.Url); } catch { return false; }
+            } else {
+                if (!i.Username?.trim()) return false;
+            }
             if (!isProxyUrlValid(i.ProxyUrl ?? "")) return false;
         }
         return true;

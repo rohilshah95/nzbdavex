@@ -79,6 +79,12 @@ public class ConfigManager
                ?? throw new InvalidOperationException("The `api.strm-key` config does not exist.");
     }
 
+    public string? GetEasynewsToken()
+    {
+        return StringUtil.EmptyToNull(GetConfigValue("easynews.token"))
+               ?? EnvironmentUtil.GetEnvironmentVariable("EASYNEWS_TOKEN");
+    }
+
     public List<string> GetApiCategories()
     {
         var value = StringUtil.EmptyToNull(GetConfigValue("api.categories"))

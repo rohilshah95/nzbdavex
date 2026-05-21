@@ -5,6 +5,9 @@ using NzbWebDAV.Extensions;
 using NzbWebDAV.Services;
 using NzbWebDAV.Utils;
 using Serilog;
+using IndexerResultFilter = NzbWebDAV.Services.IndexerResultFilter;
+using NewznabItem = NzbWebDAV.Clients.Indexers.NewznabClient.NewznabItem;
+using SearchResultType = System.Collections.Generic.IEnumerable<dynamic>;
 
 namespace NzbWebDAV.Api.Controllers.Profiles;
 
@@ -47,24 +50,66 @@ public class ProfileReadController(
         if (queryParams is null) return new JsonResult(new { streams = Array.Empty<object>() });
 
         var now = DateTimeOffset.UtcNow;
+        var easynewsToken = configManager.GetEasynewsToken();
+        var easynewsBaseUrl = HttpContext.GetPublicBaseUrl(configManager.GetBaseUrl());
+        
+        var gpsQuery = queryParams != null ? BuildEasynewsSearchQuery(queryParams) : "(no params)";
+        Log.Warning("EASYNEWS DEBUG: Profile search hit - type={Type} id={Id}, gps={GPS}, params={Params}", 
+            type, id, gpsQuery, queryParams != null ? string.Join(",", queryParams.Select(kv => $"{kv.Key}={kv.Value}")) : "none");
+        
+        Func<IndexerConfig.ConnectionDetails, Task<IEnumerable<dynamic>>> searchIndex = async x =>
+        {
+            var ua = string.IsNullOrWhiteSpace(x.UserAgent) ? configManager.GetUserAgent() : x.UserAgent;
+            var proxy = string.IsNullOrWhiteSpace(x.ProxyUrl) ? globalProxy : x.ProxyUrl;
+            await rateLimiter.WaitAsync(x.Name, x.MaxRequestsPerMinute, ct).ConfigureAwait(false);
+            
+            // Easynews
+            if (x.IndexerType?.ToLowerInvariant() == "easynews")
+            {
+                var username = x.Username ?? "";
+                var password = x.ApiKey;
+                if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
+                {
+                    Log.Warning("Indexer {Indexer} requires username and password", x.Name);
+                    return Enumerable.Empty<dynamic>();
+                }
+                
+                // Build search query from Newznab params
+                var searchQuery = BuildEasynewsSearchQuery(queryParams);
+                Log.Information("Easynews search for {Indexer}: query={Query}, params={Params}", x.Name, searchQuery, string.Join(",", queryParams.Select(kv => $"{kv.Key}={kv.Value}")));
+                if (string.IsNullOrEmpty(searchQuery))
+                {
+                    Log.Warning("Easynews search: empty query, params: {Params}", string.Join(",", queryParams.Select(kv => $"{kv.Key}={kv.Value}")));
+                    return Enumerable.Empty<dynamic>();
+                }
+                
+                Log.Information("Easynews search query: {Query}", searchQuery);
+                var client = new EasynewsClient(username, password, ua, proxy);
+                var items = await client.SearchAsync(searchQuery, 50, ct).ConfigureAwait(false);
+                return items.Select(i => new { 
+                    indexer = x.Name, 
+                    userAgent = ua, 
+                    item = new NewznabItem { 
+                        Title = i.Title, 
+                        NzbUrl = i.GetDownloadUrl(easynewsBaseUrl, easynewsToken),
+                        Size = i.Size, 
+                        Posted = i.Posted,
+                        Guid = i.Hash ?? i.Title
+                    } 
+                });
+            }
+            
+            // Newznab
+            var client2 = new NewznabClient(x.Url, x.ApiKey, ua, proxy);
+            var items2 = await client2.QueryAsync(queryParams, ct).ConfigureAwait(false);
+            var filtered = IndexerResultFilter.Apply(items2, x.Filter, now);
+            return filtered.Select(i => new { indexer = x.Name, userAgent = ua, item = i });
+        };
+        
         var perIndexer = await Task.WhenAll(indexers.Select(async x =>
         {
-            try
-            {
-                var ua = string.IsNullOrWhiteSpace(x.UserAgent) ? configManager.GetUserAgent() : x.UserAgent;
-                var proxy = string.IsNullOrWhiteSpace(x.ProxyUrl) ? globalProxy : x.ProxyUrl;
-                await rateLimiter.WaitAsync(x.Name, x.MaxRequestsPerMinute, ct).ConfigureAwait(false);
-                var client = new NewznabClient(x.Url, x.ApiKey, ua, proxy);
-                var items = await client.QueryAsync(queryParams, ct).ConfigureAwait(false);
-                var filtered = IndexerResultFilter.Apply(items, x.Filter, now);
-                return filtered.Select(i => new { indexer = x.Name, userAgent = ua, item = i });
-            }
-            catch (Exception e)
-            {
-                if (!e.IsCancellationException())
-                    Log.Warning("Indexer {Indexer} search failed: {Message}", x.Name, e.Message);
-                return [];
-            }
+            try { return await searchIndex(x).ConfigureAwait(false); }
+            catch (Exception e) { if (!e.IsCancellationException()) Log.Warning("Indexer {Indexer} search failed: {Message}", x.Name, e.Message); return Enumerable.Empty<dynamic>(); }
         })).ConfigureAwait(false);
 
         var anyPreferDownloaded = indexers.Any(x => x.Filter is { Enabled: true, PreferDownloaded: true });
@@ -167,12 +212,17 @@ public class ProfileReadController(
         {
             var imdb = StripImdbPrefix(id);
             if (imdb is null) return null;
+            
+            // Get show info for movie name
+            var showInfo = await tvdbResolver.GetShowInfoAsync(imdb, ct).ConfigureAwait(false);
+            Log.Warning("EASYNEWS DEBUG: movie showInfo for {IMDB} = {Name}", imdb, showInfo?.Name);
             return new Dictionary<string, string>
             {
                 ["t"] = "movie",
                 ["imdbid"] = imdb,
                 ["cat"] = "2000",
                 ["limit"] = "200",
+                ["search"] = showInfo != null ? $"{showInfo.Name} {showInfo.Year}" : imdb,
             };
         }
         if (type == "series")
@@ -183,6 +233,11 @@ public class ProfileReadController(
             if (imdb is null) return null;
             if (!int.TryParse(parts[1], out var season)) return null;
             if (!int.TryParse(parts[2], out var episode)) return null;
+            
+            // Get show info for show name
+            var showInfo = await tvdbResolver.GetShowInfoAsync(imdb, ct).ConfigureAwait(false);
+            Log.Warning("EASYNEWS DEBUG: showInfo for {IMDB} = {Name}, tvdb={Tvdb}", imdb, showInfo?.Name, showInfo?.TvdbId);
+            var showName = showInfo?.Name ?? "";
             var dict = new Dictionary<string, string>
             {
                 ["t"] = "tvsearch",
@@ -190,8 +245,9 @@ public class ProfileReadController(
                 ["ep"] = episode.ToString(),
                 ["cat"] = "5000",
                 ["limit"] = "200",
+                ["search"] = !string.IsNullOrEmpty(showName) ? $"{showName} S{int.Parse(parts[1]):00}E{int.Parse(parts[2]):00}" : imdb,
             };
-            var tvdb = await tvdbResolver.GetTvdbIdAsync(imdb, ct).ConfigureAwait(false);
+            var tvdb = showInfo?.TvdbId;
             if (tvdb.HasValue) dict["tvdbid"] = tvdb.Value.ToString();
             else dict["imdbid"] = imdb;
             return dict;
@@ -204,6 +260,51 @@ public class ProfileReadController(
         if (!id.StartsWith("tt", StringComparison.OrdinalIgnoreCase)) return null;
         var digits = id[2..];
         return digits.All(char.IsDigit) ? digits : null;
+    }
+
+    private static string BuildEasynewsSearchQuery(IReadOnlyDictionary<string, string> queryParams)
+    {
+        // Handle text search
+        if (queryParams.TryGetValue("q", out var q) && !string.IsNullOrEmpty(q))
+            return q;
+        
+        // Check for pre-built search string with show name FIRST (e.g., "Gen V S01E01")
+        if (queryParams.TryGetValue("search", out var searchStr) && !string.IsNullOrEmpty(searchStr))
+            return searchStr;
+        
+        // Handle movie search fallback
+        if (queryParams.TryGetValue("t", out var t) && t == "movie")
+        {
+            // Fallback: just use the title if we have it, or try imdb search
+            if (queryParams.TryGetValue("imdbid", out var imdb))
+                return $"imdb {imdb}"; // Try "imdb 0463854" format
+            return "";
+        }
+        
+        // Handle TV search fallback
+        if (t == "tvsearch")
+        {
+            // Fallback: try tvdb search
+            if (queryParams.TryGetValue("tvdbid", out var tvdb) && !string.IsNullOrEmpty(tvdb))
+            {
+                var season = queryParams.GetValueOrDefault("season");
+                var ep = queryParams.GetValueOrDefault("ep");
+                if (!string.IsNullOrEmpty(season) && !string.IsNullOrEmpty(ep))
+                    return $"tvdb {tvdb} S{int.Parse(season):00}E{int.Parse(ep):00}";
+                return $"tvdb {tvdb}";
+            }
+            if (queryParams.TryGetValue("imdbid", out var imdb) && !string.IsNullOrEmpty(imdb))
+            {
+                var season = queryParams.GetValueOrDefault("season");
+                var ep = queryParams.GetValueOrDefault("ep");
+                if (!string.IsNullOrEmpty(season) && !string.IsNullOrEmpty(ep))
+                    return $"imdb {imdb} S{int.Parse(season):00}E{int.Parse(ep):00}";
+                return $"imdb {imdb}";
+            }
+            return "";
+        }
+        
+        return "";
     }
 
     private static string FormatBytes(long bytes)

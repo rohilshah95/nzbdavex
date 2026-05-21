@@ -62,6 +62,7 @@ public class ProfilePlayController(
 
     private async Task<IActionResult> HandleAsync(string token, string nzbToken)
     {
+        Log.Warning("PLAY HANDLER: token={Token}, nzbToken={NzbToken}", token, nzbToken);
         var profile = configManager.GetProfileConfig().Profiles.FirstOrDefault(x => x.Token == token);
         if (profile is null) return NotFound();
 
@@ -69,7 +70,8 @@ public class ProfilePlayController(
         if (entry is null) return NotFound("Stream link expired. Re-search in your player.");
 
         preflightSessions.Cancel(entry.ProfileToken, entry.Type, entry.Id);
-
+        Log.Warning("PLAY HANDLER: entry found, Primary NzbUrl={Url}", entry.Primary.NzbUrl);
+        
         var skipLegacyMatch = false;
         if (variantResolver.IsEnabled)
         {
@@ -108,6 +110,7 @@ public class ProfilePlayController(
         var maxAttempts = configManager.GetPlayMaxAttempts();
         var verifyMode = configManager.GetPlayVerifyMode();
         var watchdogEnabled = configManager.IsPlaybackWatchdogEnabled();
+        Log.Warning("PLAY HANDLER: watchdog={Watchdog}, primaryUrl={Url}", watchdogEnabled, entry.Primary.NzbUrl);
         var excludePatterns = configManager.GetPlayExcludePatterns();
 
         using var totalCts = CancellationTokenSource.CreateLinkedTokenSource(HttpContext.RequestAborted);
@@ -195,10 +198,12 @@ public class ProfilePlayController(
 
             sawAnyBatch = true;
             attemptsUsed += pool.Count;
-
+            Log.Warning("PLAY HANDLER: running batch with {Count} candidates", pool.Count);
+            
             var batch = await RunBatchAsync(pool, rankIndex, nzbToken, contentType, requestedTitle,
                 clickId, startsAt, verifyMode, hedgeDelay, deadline, totalCts).ConfigureAwait(false);
 
+            Log.Warning("PLAY HANDLER: batch outcome={Outcome}", batch.Outcome);
             switch (batch.Outcome)
             {
                 case BatchOutcome.Winner:
@@ -598,6 +603,7 @@ public class ProfilePlayController(
 
     private async Task<byte[]?> FetchNzbBytesAsync(NzbResolutionCache.Candidate c, CancellationToken ct)
     {
+        Log.Warning("FETCH NZB: trying {Url} from indexer {Indexer}", c.NzbUrl, c.IndexerName);
         try
         {
             var preflighted = preflightCache.Get(c.NzbUrl);
