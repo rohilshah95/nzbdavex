@@ -5,6 +5,7 @@ using NzbWebDAV.Config;
 using NzbWebDAV.Services;
 using NzbWebDAV.Utils;
 
+
 namespace NzbWebDAV.Api.Controllers.SearchIndexers;
 
 [ApiController]
@@ -24,21 +25,64 @@ public class SearchIndexersController(ConfigManager configManager, NewznabRateLi
             var sw = Stopwatch.StartNew();
             try
             {
-                var ua = string.IsNullOrWhiteSpace(x.UserAgent) ? configManager.GetUserAgent() : x.UserAgent;
-                var proxy = string.IsNullOrWhiteSpace(x.ProxyUrl) ? globalProxy : x.ProxyUrl;
                 await rateLimiter.WaitAsync(x.Name, x.MaxRequestsPerMinute, ct).ConfigureAwait(false);
-                var client = new NewznabClient(x.Url, x.ApiKey, ua, proxy);
-                var items = await client.SearchAsync(request.Query, request.Limit, ct).ConfigureAwait(false);
-                var mapped = items
-                    .Where(i => !x.EnableStrictMatching || FilenameMatcher.Matches(request.Query, i.Title))
-                    .Select(i => new SearchIndexersResponse.Result
+                
+                // Determine indexer type (default to newznab)
+                var indexerType = x.IndexerType?.ToLowerInvariant() ?? "newznab";
+                
+                List<SearchIndexersResponse.Result> mapped;
+                
+                if (indexerType == "easynews")
+                {
+                    // Easynews indexer
+                    var username = x.Username ?? "";
+                    var password = x.ApiKey; // Use ApiKey as password for easynews
+                    
+                    if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
                     {
-                        Indexer = x.Name,
-                        Title = i.Title,
-                        NzbUrl = i.NzbUrl,
-                        Size = i.Size,
-                        Posted = i.Posted,
-                    }).ToList();
+                        throw new Exception("Easynews requires username and password");
+                    }
+                    
+                    var proxy = string.IsNullOrWhiteSpace(x.ProxyUrl) ? globalProxy : x.ProxyUrl;
+                    var client = new EasynewsClient(username, password, proxy);
+                    var items = await client.SearchAsync(request.Query, request.Limit, ct).ConfigureAwait(false);
+                    
+                    // Get base URL for download URLs
+                    var baseUrl = configManager.GetBaseUrl();
+                    // Try to get addon shared secret if configured, otherwise use empty
+                    var sharedSecret = "";
+                    
+                    mapped = items
+                        .Where(i => !x.EnableStrictMatching || FilenameMatcher.Matches(request.Query, i.Title))
+                        .Select(i => new SearchIndexersResponse.Result
+                        {
+                            Indexer = x.Name,
+                            Title = i.Title,
+                            NzbUrl = i.GetDownloadUrl(baseUrl, sharedSecret),
+                            Size = i.Size,
+                            Posted = i.Posted,
+                        }).ToList();
+                }
+                else
+                {
+                    // Newznab indexer (default)
+                    var ua = string.IsNullOrWhiteSpace(x.UserAgent) ? configManager.GetUserAgent() : x.UserAgent;
+                    var proxy = string.IsNullOrWhiteSpace(x.ProxyUrl) ? globalProxy : x.ProxyUrl;
+                    var client = new NewznabClient(x.Url, x.ApiKey, ua, proxy);
+                    var items = await client.SearchAsync(request.Query, request.Limit, ct).ConfigureAwait(false);
+                    
+                    mapped = items
+                        .Where(i => !x.EnableStrictMatching || FilenameMatcher.Matches(request.Query, i.Title))
+                        .Select(i => new SearchIndexersResponse.Result
+                        {
+                            Indexer = x.Name,
+                            Title = i.Title,
+                            NzbUrl = i.NzbUrl,
+                            Size = i.Size,
+                            Posted = i.Posted,
+                        }).ToList();
+                }
+                
                 return (Status: new SearchIndexersResponse.IndexerStatus
                 {
                     Name = x.Name,
