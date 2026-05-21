@@ -269,10 +269,10 @@ public class ConfigManager
         var v = StringUtil.EmptyToNull(GetConfigValue("preflight.mode"));
         return v switch
         {
-            "off" => "off",
             "light" => "light",
+            "standard" => "standard",
             "full" => "full",
-            _ => "standard",
+            _ => "off",
         };
     }
 
